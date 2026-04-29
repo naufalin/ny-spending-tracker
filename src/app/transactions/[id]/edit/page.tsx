@@ -79,7 +79,8 @@ function EditTransactionContent({ householdId }: { householdId: string }) {
         categories={categories}
         channels={channels}
         transaction={transaction}
-        submitLabel="Save changes"
+        submitLabel="Save changes 🌿"
+        successMessage="This record is tidy now."
         onSubmit={async (values) => {
           const { error } = await supabase
             .from("transactions")

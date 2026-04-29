@@ -101,11 +101,11 @@ function CategoriesContent({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader eyebrow="Little jars" title="Categories" />
+      <PageHeader eyebrow="Little jars" title="Spending jars" />
 
       <div className="space-y-4">
         <Card>
-          <CategoryForm buttonLabel="Create category" onSubmit={createCategory} />
+          <CategoryForm buttonLabel="Create jar" onSubmit={createCategory} />
           {message ? <p className="mt-4 text-sm font-bold text-primary-dark">{message}</p> : null}
         </Card>
 
@@ -120,7 +120,7 @@ function CategoriesContent({ householdId }: { householdId: string }) {
               <Card key={category.id}>
                 {editingId === category.id ? (
                   <CategoryForm
-                    buttonLabel="Save category"
+                    buttonLabel="Save jar"
                     defaultName={category.name}
                     defaultType={category.type}
                     onSubmit={(values) => updateCategory(category.id, values)}

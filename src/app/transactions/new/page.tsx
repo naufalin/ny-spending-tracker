@@ -59,7 +59,8 @@ function NewTransactionContent({
         categories={categories}
         channels={channels}
         defaultChannelId={defaultChannelId}
-        submitLabel="Save spending"
+        submitLabel="Save spending 🌸"
+        successMessage="Saved to the garden."
         onSubmit={async (values) => {
           const { error } = await supabase.from("transactions").insert({
             household_id: householdId,

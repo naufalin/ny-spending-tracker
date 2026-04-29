@@ -144,7 +144,7 @@ export default function LoginPage() {
               disabled={loading}
               className={`${buttonClassName} w-full`}
             >
-              Send magic link
+              Send cozy login link
             </button>
 
             <div className="grid grid-cols-2 gap-3">
@@ -153,7 +153,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="min-h-12 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-foreground transition hover:bg-accent disabled:opacity-60"
               >
-                Sign in
+                Enter garden
               </button>
               <button
                 type="button"
@@ -161,7 +161,7 @@ export default function LoginPage() {
                 disabled={loading}
                 className="min-h-12 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-foreground transition hover:bg-accent disabled:opacity-60"
               >
-                Sign up
+                Create account
               </button>
             </div>
 

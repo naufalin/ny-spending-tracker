@@ -27,6 +27,7 @@ export function TransactionForm({
   transaction,
   defaultChannelId,
   submitLabel,
+  successMessage,
   onSubmit,
 }: {
   categories: Category[];
@@ -34,6 +35,7 @@ export function TransactionForm({
   transaction?: Transaction;
   defaultChannelId?: string | null;
   submitLabel: string;
+  successMessage?: string;
   onSubmit: (values: TransactionFormValues) => Promise<string | null>;
 }) {
   const [amount, setAmount] = useState(
@@ -46,6 +48,7 @@ export function TransactionForm({
   const [type, setType] = useState<TransactionType>(transaction?.type || "expense");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [saved, setSaved] = useState(false);
 
   const filteredCategories = categories.filter((category) => category.type === type);
   const selectedCategoryId = categoryId || filteredCategories[0]?.id || "";
@@ -92,7 +95,10 @@ export function TransactionForm({
 
     if (nextError) {
       setError(nextError);
+      return;
     }
+
+    setSaved(true);
   }
 
   if (categories.length === 0) {
@@ -107,7 +113,7 @@ export function TransactionForm({
   return (
     <Card>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Field label="Amount">
+        <Field label="How much?">
           <div className="space-y-3">
             <input
               required
@@ -133,11 +139,11 @@ export function TransactionForm({
           </div>
         </Field>
 
-        <Field label="Type">
+        <Field label="Kind of bloom">
           <TypeSelect value={type} onChange={updateType} />
         </Field>
 
-        <Field label="Category">
+        <Field label="Little jar">
           <select
             required
             value={selectedCategoryId}
@@ -152,7 +158,7 @@ export function TransactionForm({
           </select>
         </Field>
 
-        <Field label="Channel">
+        <Field label="Paid from">
           <select
             value={channelId}
             onChange={(event) => setChannelId(event.target.value)}
@@ -167,16 +173,16 @@ export function TransactionForm({
           </select>
         </Field>
 
-        <Field label="Note">
+        <Field label="Tiny note">
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
             className={inputClassName}
-            placeholder="Optional sweet little detail"
+            placeholder="Optional sweet little memory"
           />
         </Field>
 
-        <Field label="Date">
+        <Field label="When?">
           <input
             required
             type="date"
@@ -187,6 +193,11 @@ export function TransactionForm({
         </Field>
 
         {error ? <p className="text-sm font-bold text-primary-dark">{error}</p> : null}
+        {saved && successMessage ? (
+          <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
+            {successMessage}
+          </p>
+        ) : null}
 
         <button disabled={saving} className={`${buttonClassName} w-full`}>
           {saving ? "Saving..." : submitLabel}

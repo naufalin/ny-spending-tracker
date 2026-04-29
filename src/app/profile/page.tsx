@@ -96,7 +96,7 @@ function ProfileContent({
 
   return (
     <>
-      <PageHeader eyebrow="Your little corner" title="Profile" />
+      <PageHeader eyebrow="Your little corner" title="About you" />
 
       <div className="space-y-4">
         <Card>
@@ -144,7 +144,7 @@ function ProfileContent({
           onClick={signOut}
           className="w-full rounded-2xl border border-border bg-card px-5 py-3 text-sm font-black text-muted"
         >
-          Sign out
+          Leave the garden
         </button>
       </div>
     </>

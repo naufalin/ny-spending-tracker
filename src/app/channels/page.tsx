@@ -113,12 +113,12 @@ function ChannelsContent({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader eyebrow="Spending channels" title="Wallets" />
+      <PageHeader eyebrow="Money paths" title="Wallets" />
 
       <div className="space-y-4">
         <Card>
           <form onSubmit={createChannel} className="space-y-4">
-            <Field label="Channel name">
+            <Field label="Wallet name">
               <input
                 required
                 value={name}
@@ -131,15 +131,15 @@ function ChannelsContent({ householdId }: { householdId: string }) {
             {message ? <p className="text-sm font-bold text-primary-dark">{message}</p> : null}
 
             <button disabled={saving} className={`${buttonClassName} w-full`}>
-              {saving ? "Saving..." : "Create channel"}
+              {saving ? "Saving..." : "Create wallet"}
             </button>
           </form>
         </Card>
 
         {channels.length === 0 ? (
           <EmptyState
-            title="No channels yet"
-            body="Add Tunai, Rekening BCA, Rekening Jago, or any wallet you use."
+            title="No wallets yet"
+            body="Add Tunai, Rekening BCA, Rekening Jago, or any money path you use."
           />
         ) : (
           <div className="space-y-3">
@@ -147,7 +147,7 @@ function ChannelsContent({ householdId }: { householdId: string }) {
               <Card key={channel.id}>
                 {editingId === channel.id ? (
                   <form onSubmit={(event) => updateChannel(event, channel.id)} className="space-y-3">
-                    <Field label="Channel name">
+                    <Field label="Wallet name">
                       <input
                         required
                         value={editingName}

@@ -15,6 +15,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [month, setMonth] = useState(monthStart().slice(0, 7));
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
@@ -120,6 +121,18 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     return `Added by ${profiles[transaction.user_id]?.display_name || "household member"}`;
   }
 
+  function getCreatorShortLabel(transaction: Transaction) {
+    if (!transaction.user_id) {
+      return "Someone";
+    }
+
+    if (transaction.user_id === userId) {
+      return "You";
+    }
+
+    return profiles[transaction.user_id]?.display_name || "Member";
+  }
+
   async function deleteTransaction(transactionId: string) {
     const shouldDelete = window.confirm("Delete this transaction?");
 
@@ -152,7 +165,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     <>
       <PageHeader
         eyebrow="Spending basket"
-        title="Transactions"
+        title="Spending basket"
         action={
           <Link href="/transactions/new" className={buttonClassName}>
             Add
@@ -261,14 +274,19 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
             <Card key={transaction.id}>
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-black text-foreground">
-                    {transaction.categories?.name || "Uncategorized"}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
+                      {transaction.categories?.name || "Uncategorized"}
+                    </span>
+                    <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
+                      {transaction.channels?.name || "No channel"}
+                    </span>
+                    <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
+                      {getCreatorShortLabel(transaction)}
+                    </span>
+                  </div>
                   <p className="mt-1 text-sm text-muted">
                     {formatDate(transaction.spent_at)} · {getCreatorLabel(transaction)}
-                  </p>
-                  <p className="mt-1 text-sm font-bold text-muted">
-                    {transaction.channels?.name || "No channel"}
                   </p>
                   {transaction.note ? (
                     <p className="mt-2 text-sm leading-6 text-muted">{transaction.note}</p>
@@ -285,22 +303,37 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   {formatIdr(transaction.amount)}
                 </p>
               </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <Link
-                  href={`/transactions/${transaction.id}/edit`}
-                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
-                >
-                  Edit
-                </Link>
+              <div className="mt-4 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => deleteTransaction(transaction.id)}
-                  disabled={deletingId === transaction.id}
+                  onClick={() =>
+                    setOpenActionsId((current) =>
+                      current === transaction.id ? null : transaction.id
+                    )
+                  }
                   className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark disabled:opacity-60"
                 >
-                  {deletingId === transaction.id ? "Deleting..." : "Delete"}
+                  More
                 </button>
               </div>
+              {openActionsId === transaction.id ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-background p-2">
+                  <Link
+                    href={`/transactions/${transaction.id}/edit`}
+                    className="rounded-xl bg-card px-4 py-3 text-center text-sm font-black text-foreground"
+                  >
+                    Edit
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => deleteTransaction(transaction.id)}
+                    disabled={deletingId === transaction.id}
+                    className="rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark disabled:opacity-60"
+                  >
+                    {deletingId === transaction.id ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              ) : null}
             </Card>
           ))}
         </div>

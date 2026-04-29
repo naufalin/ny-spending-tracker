@@ -100,7 +100,7 @@ function BudgetsContent({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader eyebrow="Garden progress" title="Budgets" />
+      <PageHeader eyebrow="Garden plan" title="Budget garden" />
 
       <div className="space-y-4">
         {categories.length === 0 ? (
@@ -150,7 +150,7 @@ function BudgetsContent({ householdId }: { householdId: string }) {
               {message ? <p className="text-sm font-bold text-primary-dark">{message}</p> : null}
 
               <button disabled={saving || !categoryId} className={`${buttonClassName} w-full`}>
-                {saving ? "Saving..." : "Save budget"}
+                {saving ? "Saving..." : "Save garden plan"}
               </button>
             </form>
           </Card>
@@ -158,7 +158,7 @@ function BudgetsContent({ householdId }: { householdId: string }) {
 
         {budgets.length === 0 ? (
           <EmptyState
-            title="No budgets yet"
+            title="No garden plan yet"
             body="Set a monthly amount for groceries, coffee, or any spending jar."
           />
         ) : (

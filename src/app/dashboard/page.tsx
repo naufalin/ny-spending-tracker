@@ -13,7 +13,7 @@ import {
 } from "@/components/app-shell";
 import { formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Budget, Transaction } from "@/types/database";
+import type { Budget, Category, Channel, Transaction } from "@/types/database";
 
 type CategoryTotal = {
   id?: string;
@@ -36,14 +36,25 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMessage, setSeedMessage] = useState("");
+  const [setupDismissed, setSetupDismissed] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem("our-little-ledger-setup-dismissed") === "true";
+  });
   const greetingName = getGreetingName(user);
 
   useEffect(() => {
-    async function loadDashboard() {
-      setLoading(true);
+    let isMounted = true;
 
-      const [transactionResult, budgetResult] = await Promise.all([
+    async function loadDashboard() {
+      const [transactionResult, budgetResult, categoryResult, channelResult] = await Promise.all([
         supabase
           .from("transactions")
           .select("*, categories(id, name, type), channels(id, name)")
@@ -56,15 +67,35 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           .select("*, categories(id, name, type)")
           .eq("household_id", householdId)
           .eq("month", monthStart()),
+        supabase.from("categories").select("*").eq("household_id", householdId),
+        supabase.from("channels").select("*").eq("household_id", householdId),
       ]);
 
-      setTransactions((transactionResult.data || []) as Transaction[]);
-      setBudgets((budgetResult.data || []) as Budget[]);
-      setLoading(false);
+      if (isMounted) {
+        setTransactions((transactionResult.data || []) as Transaction[]);
+        setBudgets((budgetResult.data || []) as Budget[]);
+        setCategories((categoryResult.data || []) as Category[]);
+        setChannels((channelResult.data || []) as Channel[]);
+        setLoading(false);
+      }
     }
 
     loadDashboard();
+
+    return () => {
+      isMounted = false;
+    };
   }, [householdId, supabase]);
+
+  async function refreshDashboard() {
+    const [categoryResult, channelResult] = await Promise.all([
+      supabase.from("categories").select("*").eq("household_id", householdId),
+      supabase.from("channels").select("*").eq("household_id", householdId),
+    ]);
+
+    setCategories((categoryResult.data || []) as Category[]);
+    setChannels((channelResult.data || []) as Channel[]);
+  }
 
   const expenses = transactions.filter((transaction) => transaction.type === "expense");
   const monthTotal = expenses.reduce((sum, transaction) => sum + transaction.amount, 0);
@@ -102,6 +133,30 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0);
   const remainingBudget = totalBudget - monthTotal;
+  const setupItems = [
+    {
+      label: "Create spending jars",
+      done: categories.length > 0,
+      href: "/categories",
+    },
+    {
+      label: "Create wallets",
+      done: channels.length > 0,
+      href: "/channels",
+    },
+    {
+      label: "Add first spending",
+      done: transactions.length > 0,
+      href: "/transactions/new",
+    },
+    {
+      label: "Set garden plan",
+      done: budgets.length > 0,
+      href: "/budgets",
+    },
+  ];
+  const setupComplete = setupItems.every((item) => item.done);
+  const showSetupChecklist = !loading && !setupComplete && !setupDismissed;
   const budgetProgress = budgets.map((budget) => {
     const spent = expenses
       .filter((transaction) => transaction.category_id === budget.category_id)
@@ -116,6 +171,60 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     };
   });
 
+  async function seedStarterData() {
+    setSeeding(true);
+    setSeedMessage("");
+
+    const starterCategories = [
+      { name: "Coffee", type: "expense" },
+      { name: "Groceries", type: "expense" },
+      { name: "Transport", type: "expense" },
+      { name: "Bills", type: "expense" },
+      { name: "Date Night", type: "expense" },
+      { name: "Income", type: "income" },
+    ] as const;
+    const starterChannels = ["Tunai", "Rekening BCA", "Rekening Jago"];
+    const existingCategoryNames = new Set(categories.map((category) => category.name.toLowerCase()));
+    const existingChannelNames = new Set(channels.map((channel) => channel.name.toLowerCase()));
+    const categoriesToInsert = starterCategories
+      .filter((category) => !existingCategoryNames.has(category.name.toLowerCase()))
+      .map((category) => ({
+        household_id: householdId,
+        name: category.name,
+        type: category.type,
+      }));
+    const channelsToInsert = starterChannels
+      .filter((name) => !existingChannelNames.has(name.toLowerCase()))
+      .map((name) => ({
+        household_id: householdId,
+        name,
+      }));
+
+    const [categoryResult, channelResult] = await Promise.all([
+      categoriesToInsert.length
+        ? supabase.from("categories").insert(categoriesToInsert)
+        : Promise.resolve({ error: null }),
+      channelsToInsert.length
+        ? supabase.from("channels").insert(channelsToInsert)
+        : Promise.resolve({ error: null }),
+    ]);
+
+    setSeeding(false);
+
+    if (categoryResult.error || channelResult.error) {
+      setSeedMessage(categoryResult.error?.message || channelResult.error?.message || "Could not plant starters.");
+      return;
+    }
+
+    setSeedMessage("Starter jars and wallets are planted.");
+    await refreshDashboard();
+  }
+
+  function dismissSetupChecklist() {
+    window.localStorage.setItem("our-little-ledger-setup-dismissed", "true");
+    setSetupDismissed(true);
+  }
+
   return (
     <>
       <PageHeader
@@ -129,6 +238,54 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
       />
 
       <div className="space-y-4">
+        {showSetupChecklist ? (
+          <Card className="bg-[linear-gradient(145deg,#FFFFFF,#FFF9F2)]">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+                🌱
+              </span>
+              <div>
+                <h2 className="text-lg font-black text-foreground">Plant your first garden</h2>
+                <p className="text-sm text-muted">A tiny checklist to get the ledger cozy.</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {setupItems.map((item) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className="flex items-center justify-between rounded-2xl bg-background px-4 py-3 text-sm font-black text-foreground"
+                >
+                  <span>{item.label}</span>
+                  <span className={item.done ? "text-secondary" : "text-muted"}>
+                    {item.done ? "Done" : "Start"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={seedStarterData}
+              disabled={seeding}
+              className={`${buttonClassName} mt-4 w-full`}
+            >
+              {seeding ? "Planting..." : "Plant starter jars & wallets"}
+            </button>
+            {seedMessage ? (
+              <p className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
+                {seedMessage}
+              </p>
+            ) : null}
+            <button
+              type="button"
+              onClick={dismissSetupChecklist}
+              className="mt-3 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted"
+            >
+              Hide this checklist
+            </button>
+          </Card>
+        ) : null}
+
         <Card className="relative overflow-hidden bg-[radial-gradient(circle_at_85%_15%,#F6D6DE,transparent_34%),linear-gradient(145deg,#FFFFFF,#FFF9F2)] p-5">
           <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/80" />
           <div className="pointer-events-none absolute right-6 top-8 rotate-12 text-5xl opacity-80 soft-bloom">

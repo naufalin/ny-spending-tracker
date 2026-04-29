@@ -26,11 +26,18 @@ create table if not exists public.categories (
   type text not null check (type in ('expense', 'income'))
 );
 
+create table if not exists public.channels (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid references public.households(id) on delete cascade,
+  name text not null
+);
+
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references public.households(id) on delete cascade,
   user_id uuid references auth.users(id),
   category_id uuid references public.categories(id),
+  channel_id uuid references public.channels(id),
   amount integer not null,
   type text not null check (type in ('expense', 'income')),
   note text,
@@ -54,6 +61,7 @@ alter table public.households enable row level security;
 alter table public.household_members enable row level security;
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
+alter table public.channels enable row level security;
 alter table public.transactions enable row level security;
 alter table public.budgets enable row level security;
 
@@ -144,6 +152,50 @@ create policy "Members can update categories"
     )
   );
 
+create policy "Members can view channels"
+  on public.channels
+  for select
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = channels.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can create channels"
+  on public.channels
+  for insert
+  with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = channels.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can update channels"
+  on public.channels
+  for update
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = channels.household_id
+        and household_members.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = channels.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
 create policy "Members can view transactions"
   on public.transactions
   for select
@@ -173,6 +225,26 @@ create policy "Members can delete transactions"
   on public.transactions
   for delete
   using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transactions.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can update transactions"
+  on public.transactions
+  for update
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transactions.household_id
+        and household_members.user_id = auth.uid()
+    )
+  )
+  with check (
     exists (
       select 1
       from public.household_members

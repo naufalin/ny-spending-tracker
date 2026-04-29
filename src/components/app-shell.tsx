@@ -26,6 +26,7 @@ const navItems = [
   { href: "/transactions", label: "Spend", icon: "🧺" },
   { href: "/categories", label: "Jars", icon: "🏷️" },
   { href: "/budgets", label: "Budget", icon: "🌿" },
+  { href: "/channels", label: "Wallets", icon: "👛" },
   { href: "/profile", label: "Me", icon: "☺️" },
 ];
 
@@ -37,7 +38,7 @@ export function AppShell({ children }: AppShellProps) {
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col">
         <main className="flex-1 px-4 pb-28 pt-5">{children}</main>
         <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 py-3 shadow-[0_-12px_30px_rgba(217,111,145,0.12)] backdrop-blur">
-          <div className="mx-auto grid max-w-md grid-cols-5 gap-1">
+          <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
@@ -46,7 +47,7 @@ export function AppShell({ children }: AppShellProps) {
                   key={item.href}
                   href={item.href}
                   className={classNames(
-                    "flex min-h-14 flex-col items-center justify-center rounded-2xl text-xs font-bold transition",
+                    "flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-bold transition",
                     isActive
                       ? "bg-accent text-primary-dark"
                       : "text-muted hover:bg-background"

@@ -25,17 +25,25 @@ export type Category = {
   type: TransactionType;
 };
 
+export type Channel = {
+  id: string;
+  household_id: string;
+  name: string;
+};
+
 export type Transaction = {
   id: string;
   household_id: string;
   user_id: string | null;
   category_id: string | null;
+  channel_id: string | null;
   amount: number;
   type: TransactionType;
   note: string | null;
   spent_at: string;
   created_at: string | null;
   categories?: Pick<Category, "id" | "name" | "type"> | null;
+  channels?: Pick<Channel, "id" | "name"> | null;
 };
 
 export type Budget = {
@@ -73,6 +81,11 @@ export type Database = {
         Row: Category;
         Insert: Omit<Category, "id"> & { id?: string };
         Update: Partial<Category>;
+      };
+      channels: {
+        Row: Channel;
+        Insert: Omit<Channel, "id"> & { id?: string };
+        Update: Partial<Channel>;
       };
       transactions: {
         Row: Transaction;

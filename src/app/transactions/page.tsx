@@ -21,7 +21,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     async function loadTransactions() {
       const { data } = await supabase
         .from("transactions")
-        .select("*, categories(id, name, type)")
+        .select("*, categories(id, name, type), channels(id, name)")
         .eq("household_id", householdId)
         .order("spent_at", { ascending: false })
         .order("created_at", { ascending: false })
@@ -133,6 +133,9 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   <p className="mt-1 text-sm text-muted">
                     {formatDate(transaction.spent_at)} · {getCreatorLabel(transaction)}
                   </p>
+                  <p className="mt-1 text-sm font-bold text-muted">
+                    {transaction.channels?.name || "No channel"}
+                  </p>
                   {transaction.note ? (
                     <p className="mt-2 text-sm leading-6 text-muted">{transaction.note}</p>
                   ) : null}
@@ -148,7 +151,13 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   {formatIdr(transaction.amount)}
                 </p>
               </div>
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end gap-2">
+                <Link
+                  href={`/transactions/${transaction.id}/edit`}
+                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
+                >
+                  Edit
+                </Link>
                 <button
                   type="button"
                   onClick={() => deleteTransaction(transaction.id)}

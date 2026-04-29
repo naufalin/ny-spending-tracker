@@ -24,8 +24,6 @@ type ProtectedPageProps = {
 const navItems = [
   { href: "/dashboard", label: "Garden", icon: "🌸" },
   { href: "/transactions", label: "Spend", icon: "🧺" },
-  { href: "/categories", label: "Jars", icon: "🏷️" },
-  { href: "/budgets", label: "Budget", icon: "🌿" },
   { href: "/channels", label: "Wallets", icon: "👛" },
   { href: "/profile", label: "Me", icon: "☺️" },
 ];
@@ -34,12 +32,15 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="relative min-h-screen overflow-hidden bg-background">
+      <div className="pointer-events-none absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
+      <div className="pointer-events-none absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col">
-        <main className="flex-1 px-4 pb-28 pt-5">{children}</main>
-        <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-card/95 px-3 py-3 shadow-[0_-12px_30px_rgba(217,111,145,0.12)] backdrop-blur">
-          <div className="mx-auto grid max-w-md grid-cols-6 gap-1">
-            {navItems.map((item) => {
+        <main className="relative z-10 flex-1 px-4 pb-32 pt-5">{children}</main>
+        <nav className="fixed inset-x-0 bottom-0 z-20 px-3 pb-3">
+          <div className="mx-auto max-w-md rounded-[1.75rem] border border-border bg-card/95 px-3 py-3 shadow-[0_-12px_34px_rgba(217,111,145,0.16)] backdrop-blur">
+            <div className="grid grid-cols-5 items-end gap-1">
+            {navItems.slice(0, 2).map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
               return (
@@ -47,9 +48,9 @@ export function AppShell({ children }: AppShellProps) {
                   key={item.href}
                   href={item.href}
                   className={classNames(
-                    "flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-bold transition",
+                    "flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-bold transition active:scale-95",
                     isActive
-                      ? "bg-accent text-primary-dark"
+                      ? "bg-accent text-primary-dark shadow-inner"
                       : "text-muted hover:bg-background"
                   )}
                 >
@@ -60,6 +61,38 @@ export function AppShell({ children }: AppShellProps) {
                 </Link>
               );
             })}
+            <Link
+              href="/transactions/new"
+              className="-mt-8 flex h-16 w-16 flex-col items-center justify-center justify-self-center rounded-full border-4 border-card bg-primary text-sm font-black text-foreground shadow-[0_12px_26px_rgba(217,111,145,0.32)] transition active:scale-95"
+              aria-label="Add spending"
+            >
+              <span className="text-2xl leading-none" aria-hidden="true">
+                +
+              </span>
+              <span className="text-[10px] leading-none">Add</span>
+            </Link>
+            {navItems.slice(2).map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={classNames(
+                    "flex min-h-14 flex-col items-center justify-center rounded-2xl text-[11px] font-bold transition active:scale-95",
+                    isActive
+                      ? "bg-accent text-primary-dark shadow-inner"
+                      : "text-muted hover:bg-background"
+                  )}
+                >
+                  <span className="text-lg" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+            </div>
           </div>
         </nav>
       </div>
@@ -189,10 +222,13 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <header className="mb-5 flex items-start justify-between gap-4">
+    <header className="mb-5 flex items-start justify-between gap-4 petal-rise">
       <div>
         {eyebrow ? (
-          <p className="mb-1 text-sm font-bold text-primary-dark">{eyebrow}</p>
+          <p className="mb-1 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-bold text-primary-dark">
+            <span aria-hidden="true">✿</span>
+            {eyebrow}
+          </p>
         ) : null}
         <h1 className="text-3xl font-black tracking-normal text-foreground">{title}</h1>
       </div>
@@ -211,7 +247,7 @@ export function Card({
   return (
     <section
       className={classNames(
-        "rounded-2xl border border-border bg-card p-4 shadow-[0_10px_30px_rgba(217,111,145,0.10)]",
+        "rounded-2xl border border-border bg-card p-4 shadow-[0_10px_30px_rgba(217,111,145,0.10)] transition duration-200 active:scale-[0.99]",
         className
       )}
     >
@@ -223,7 +259,7 @@ export function Card({
 export function EmptyState({ title, body }: { title: string; body: string }) {
   return (
     <Card className="text-center">
-      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl">
+      <div className="soft-bloom mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl">
         🌸
       </div>
       <h2 className="text-lg font-black text-foreground">{title}</h2>

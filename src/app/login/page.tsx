@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, Field, buttonClassName, inputClassName } from "@/components/app-shell";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -8,18 +8,37 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 export default function LoginPage() {
   const router = useRouter();
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const formRef = useRef<HTMLFormElement>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
+  function getLoginValues() {
+    const formData = new FormData(formRef.current || undefined);
+    const formEmail = String(formData.get("email") || email).trim();
+    const formPassword = String(formData.get("password") || password);
+
+    return {
+      email: formEmail,
+      password: formPassword,
+    };
+  }
+
   async function sendMagicLink() {
+    const values = getLoginValues();
+
+    if (!values.email) {
+      setMessage("Enter your email first.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: values.email,
       options: {
         emailRedirectTo:
           typeof window === "undefined" ? undefined : `${window.location.origin}/dashboard`,
@@ -30,11 +49,20 @@ export default function LoginPage() {
     setMessage(error ? error.message : "Check your email for a cozy little login link.");
   }
 
-  async function signInWithPassword() {
+  async function signInWithPassword(event?: React.FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+
+    const values = getLoginValues();
+
+    if (!values.email || !values.password) {
+      setMessage("Enter your email and password first.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword(values);
 
     setLoading(false);
 
@@ -47,10 +75,17 @@ export default function LoginPage() {
   }
 
   async function signUpWithPassword() {
+    const values = getLoginValues();
+
+    if (!values.email || !values.password) {
+      setMessage("Enter your email and password first.");
+      return;
+    }
+
     setLoading(true);
     setMessage("");
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp(values);
 
     setLoading(false);
     setMessage(error ? error.message : "Account created. Check your email if Supabase asks you to confirm.");
@@ -68,10 +103,12 @@ export default function LoginPage() {
         </div>
 
         <Card>
-          <div className="space-y-4">
+          <form ref={formRef} onSubmit={signInWithPassword} className="space-y-4">
             <Field label="Email">
               <input
+                name="email"
                 type="email"
+                autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className={inputClassName}
@@ -83,7 +120,9 @@ export default function LoginPage() {
             <Field label="Password">
               <div className="relative">
                 <input
+                  name="password"
                   type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className={`${inputClassName} pr-24`}
@@ -102,7 +141,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={sendMagicLink}
-              disabled={loading || !email}
+              disabled={loading}
               className={`${buttonClassName} w-full`}
             >
               Send magic link
@@ -110,9 +149,8 @@ export default function LoginPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <button
-                type="button"
-                onClick={signInWithPassword}
-                disabled={loading || !email || !password}
+                type="submit"
+                disabled={loading}
                 className="min-h-12 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-foreground transition hover:bg-accent disabled:opacity-60"
               >
                 Sign in
@@ -120,7 +158,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={signUpWithPassword}
-                disabled={loading || !email || !password}
+                disabled={loading}
                 className="min-h-12 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-foreground transition hover:bg-accent disabled:opacity-60"
               >
                 Sign up
@@ -132,7 +170,7 @@ export default function LoginPage() {
                 {message}
               </p>
             ) : null}
-          </div>
+          </form>
         </Card>
       </div>
     </main>

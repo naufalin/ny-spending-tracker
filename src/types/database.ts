@@ -15,6 +15,7 @@ export type HouseholdMember = {
 export type Profile = {
   id: string;
   display_name: string;
+  default_channel_id: string | null;
   updated_at: string | null;
 };
 

@@ -32,6 +32,9 @@ create table if not exists public.channels (
   name text not null
 );
 
+alter table public.profiles
+  add column if not exists default_channel_id uuid references public.channels(id) on delete set null;
+
 create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references public.households(id) on delete cascade,
@@ -152,6 +155,18 @@ create policy "Members can update categories"
     )
   );
 
+create policy "Members can delete categories"
+  on public.categories
+  for delete
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = categories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
 create policy "Members can view channels"
   on public.channels
   for select
@@ -188,6 +203,18 @@ create policy "Members can update channels"
     )
   )
   with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = channels.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can delete channels"
+  on public.channels
+  for delete
+  using (
     exists (
       select 1
       from public.household_members

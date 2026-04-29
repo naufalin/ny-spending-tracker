@@ -9,6 +9,7 @@ import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Budget, Transaction } from "@/types/database";
 
 type CategoryTotal = {
+  id?: string;
   name: string;
   amount: number;
 };
@@ -38,7 +39,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
       const [transactionResult, budgetResult] = await Promise.all([
         supabase
           .from("transactions")
-          .select("*, categories(id, name, type)")
+          .select("*, categories(id, name, type), channels(id, name)")
           .eq("household_id", householdId)
           .gte("spent_at", monthStart())
           .lt("spent_at", nextMonthStart())
@@ -72,6 +73,13 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
   const categoryTotals = expenses.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
     const name = transaction.categories?.name || "Uncategorized";
+    acc[name] = acc[name] || { id: transaction.category_id || undefined, name, amount: 0 };
+    acc[name].amount += transaction.amount;
+    return acc;
+  }, {});
+
+  const channelTotals = expenses.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
+    const name = transaction.channels?.name || "No channel";
     acc[name] = acc[name] || { name, amount: 0 };
     acc[name].amount += transaction.amount;
     return acc;
@@ -81,8 +89,25 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 4);
 
+  const topChannels = Object.values(channelTotals)
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 4);
+
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0);
   const remainingBudget = totalBudget - monthTotal;
+  const budgetProgress = budgets.map((budget) => {
+    const spent = expenses
+      .filter((transaction) => transaction.category_id === budget.category_id)
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+    return {
+      id: budget.id,
+      name: budget.categories?.name || "Category",
+      spent,
+      amount: budget.amount,
+      remaining: budget.amount - spent,
+    };
+  });
 
   return (
     <>
@@ -139,6 +164,24 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         </Card>
 
         <Card>
+          <h2 className="text-lg font-black text-foreground">By channel</h2>
+          {topChannels.length ? (
+            <div className="mt-4 space-y-3">
+              {topChannels.map((channel) => (
+                <div key={channel.name} className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-bold text-foreground">{channel.name}</span>
+                  <span className="text-sm font-black text-primary-dark">
+                    {formatIdr(channel.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted">No channel spending yet.</p>
+          )}
+        </Card>
+
+        <Card>
           <h2 className="text-lg font-black text-foreground">Garden progress</h2>
           {totalBudget > 0 ? (
             <>
@@ -146,6 +189,31 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               <p className="mt-2 text-3xl font-black text-foreground">
                 {formatIdr(remainingBudget)}
               </p>
+              <div className="mt-4 space-y-4">
+                {budgetProgress.map((budget) => {
+                  const percent = Math.min(100, Math.round((budget.spent / budget.amount) * 100));
+
+                  return (
+                    <div key={budget.id}>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-foreground">{budget.name}</p>
+                        <p className="text-sm font-bold text-muted">
+                          {formatIdr(budget.remaining)} left
+                        </p>
+                      </div>
+                      <div className="h-3 overflow-hidden rounded-full bg-background">
+                        <div
+                          className="h-full rounded-full bg-secondary"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 text-xs font-bold text-muted">
+                        {formatIdr(budget.spent)} of {formatIdr(budget.amount)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </>
           ) : (
             <p className="mt-3 text-sm leading-6 text-muted">

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader, ProtectedPage } from "@/components/app-shell";
 import { TransactionForm } from "@/components/transaction-form";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Category, Channel } from "@/types/database";
+import type { Category, Channel, Profile } from "@/types/database";
 
 function NewTransactionContent({
   householdId,
@@ -18,12 +18,13 @@ function NewTransactionContent({
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [defaultChannelId, setDefaultChannelId] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadOptions() {
-      const [categoryResult, channelResult] = await Promise.all([
+      const [categoryResult, channelResult, profileResult] = await Promise.all([
         supabase
           .from("categories")
           .select("*")
@@ -34,11 +35,13 @@ function NewTransactionContent({
           .select("*")
           .eq("household_id", householdId)
           .order("name"),
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
       ]);
 
       if (isMounted) {
         setCategories((categoryResult.data || []) as Category[]);
         setChannels((channelResult.data || []) as Channel[]);
+        setDefaultChannelId(((profileResult.data as Profile | null)?.default_channel_id) || null);
       }
     }
 
@@ -47,7 +50,7 @@ function NewTransactionContent({
     return () => {
       isMounted = false;
     };
-  }, [householdId, supabase]);
+  }, [householdId, supabase, userId]);
 
   return (
     <>
@@ -55,6 +58,7 @@ function NewTransactionContent({
       <TransactionForm
         categories={categories}
         channels={channels}
+        defaultChannelId={defaultChannelId}
         submitLabel="Save spending"
         onSubmit={async (values) => {
           const { error } = await supabase.from("transactions").insert({

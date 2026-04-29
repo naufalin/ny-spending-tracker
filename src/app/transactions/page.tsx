@@ -2,32 +2,51 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, PageHeader, ProtectedPage, buttonClassName } from "@/components/app-shell";
-import { formatDate, formatIdr } from "@/lib/utils";
+import { Card, EmptyState, Field, PageHeader, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
+import { formatDate, formatIdr, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Profile, Transaction } from "@/types/database";
+import type { Category, Channel, Profile, Transaction, TransactionType } from "@/types/database";
 
 function TransactionsContent({ householdId, userId }: { householdId: string; userId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
+  const [month, setMonth] = useState(monthStart().slice(0, 7));
+  const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [channelFilter, setChannelFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState("all");
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadTransactions() {
-      const { data } = await supabase
-        .from("transactions")
-        .select("*, categories(id, name, type), channels(id, name)")
-        .eq("household_id", householdId)
-        .order("spent_at", { ascending: false })
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const [transactionResult, categoryResult, channelResult] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*, categories(id, name, type), channels(id, name)")
+          .eq("household_id", householdId)
+          .order("spent_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("categories")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+        supabase
+          .from("channels")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+      ]);
 
-      const nextTransactions = (data || []) as Transaction[];
+      const nextTransactions = (transactionResult.data || []) as Transaction[];
       const userIds = Array.from(
         new Set(
           nextTransactions
@@ -42,6 +61,8 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
       if (isMounted) {
         setTransactions(nextTransactions);
+        setCategories((categoryResult.data || []) as Category[]);
+        setChannels((channelResult.data || []) as Channel[]);
         setProfiles(
           ((profileData || []) as Profile[]).reduce<Record<string, Profile>>((acc, profile) => {
             acc[profile.id] = profile;
@@ -58,6 +79,34 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       isMounted = false;
     };
   }, [householdId, supabase]);
+
+  const filteredTransactions = transactions.filter((transaction) => {
+    if (month && !transaction.spent_at.startsWith(month)) {
+      return false;
+    }
+
+    if (typeFilter !== "all" && transaction.type !== typeFilter) {
+      return false;
+    }
+
+    if (categoryFilter !== "all" && transaction.category_id !== categoryFilter) {
+      return false;
+    }
+
+    if (channelFilter !== "all" && transaction.channel_id !== channelFilter) {
+      return false;
+    }
+
+    if (personFilter !== "all" && transaction.user_id !== personFilter) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const people = Array.from(
+    new Set(transactions.map((transaction) => transaction.user_id).filter((id): id is string => Boolean(id)))
+  );
 
   function getCreatorLabel(transaction: Transaction) {
     if (!transaction.user_id) {
@@ -117,13 +166,98 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         <EmptyState title="No spending yet" body="A fresh lily garden. Add your first transaction." />
       ) : (
         <div className="space-y-3">
+          <Card>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Month">
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(event) => setMonth(event.target.value)}
+                  className={inputClassName}
+                />
+              </Field>
+              <Field label="Type">
+                <select
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value as "all" | TransactionType)}
+                  className={inputClassName}
+                >
+                  <option value="all">All</option>
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </select>
+              </Field>
+              <Field label="Category">
+                <select
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className={inputClassName}
+                >
+                  <option value="all">All</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Channel">
+                <select
+                  value={channelFilter}
+                  onChange={(event) => setChannelFilter(event.target.value)}
+                  className={inputClassName}
+                >
+                  <option value="all">All</option>
+                  {channels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Person">
+                <select
+                  value={personFilter}
+                  onChange={(event) => setPersonFilter(event.target.value)}
+                  className={inputClassName}
+                >
+                  <option value="all">All</option>
+                  {people.map((personId) => (
+                    <option key={personId} value={personId}>
+                      {personId === userId ? "You" : profiles[personId]?.display_name || "Household member"}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMonth("");
+                    setTypeFilter("all");
+                    setCategoryFilter("all");
+                    setChannelFilter("all");
+                    setPersonFilter("all");
+                  }}
+                  className="min-h-12 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          </Card>
+
           {message ? (
             <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-bold text-primary-dark">
               {message}
             </p>
           ) : null}
 
-          {transactions.map((transaction) => (
+          {filteredTransactions.length === 0 ? (
+            <EmptyState title="Nothing matches" body="Try relaxing the filters a little." />
+          ) : null}
+
+          {filteredTransactions.map((transaction) => (
             <Card key={transaction.id}>
               <div className="flex items-start justify-between gap-3">
                 <div>

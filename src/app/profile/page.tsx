@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Card,
   Field,
@@ -10,20 +10,55 @@ import {
   inputClassName,
 } from "@/components/app-shell";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import type { Channel, Profile } from "@/types/database";
 
 function ProfileContent({
   userId,
+  householdId,
   name,
   email,
 }: {
   userId: string;
+  householdId: string;
   name: string;
   email: string;
 }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [displayName, setDisplayName] = useState(name);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [defaultChannelId, setDefaultChannelId] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfileOptions() {
+      const [channelResult, profileResult] = await Promise.all([
+        supabase
+          .from("channels")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+      ]);
+
+      if (isMounted) {
+        setChannels((channelResult.data || []) as Channel[]);
+        const profile = profileResult.data as Profile | null;
+        setDefaultChannelId(profile?.default_channel_id || "");
+        if (profile?.display_name) {
+          setDisplayName(profile.display_name);
+        }
+      }
+    }
+
+    loadProfileOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [householdId, supabase, userId]);
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,6 +81,7 @@ function ProfileContent({
     const { error: profileError } = await supabase.from("profiles").upsert({
       id: userId,
       display_name: displayName.trim(),
+      default_channel_id: defaultChannelId || null,
       updated_at: new Date().toISOString(),
     });
 
@@ -73,6 +109,21 @@ function ProfileContent({
                 className={inputClassName}
                 placeholder="What should we call you?"
               />
+            </Field>
+
+            <Field label="Default channel">
+              <select
+                value={defaultChannelId}
+                onChange={(event) => setDefaultChannelId(event.target.value)}
+                className={inputClassName}
+              >
+                <option value="">No default</option>
+                {channels.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}
+                  </option>
+                ))}
+              </select>
             </Field>
 
             <div className="rounded-2xl bg-background px-4 py-3">
@@ -110,6 +161,7 @@ export default function ProfilePage() {
       {({ context }) => (
         <ProfileContent
           userId={context.user.id}
+          householdId={context.householdId}
           name={getInitialName(context.user.user_metadata?.full_name, context.user.email || "")}
           email={context.user.email || "Unknown email"}
         />

@@ -25,12 +25,14 @@ export function TransactionForm({
   categories,
   channels,
   transaction,
+  defaultChannelId,
   submitLabel,
   onSubmit,
 }: {
   categories: Category[];
   channels: Channel[];
   transaction?: Transaction;
+  defaultChannelId?: string | null;
   submitLabel: string;
   onSubmit: (values: TransactionFormValues) => Promise<string | null>;
 }) {
@@ -38,7 +40,7 @@ export function TransactionForm({
     transaction ? formatNumberWithCommas(String(transaction.amount)) : ""
   );
   const [categoryId, setCategoryId] = useState(transaction?.category_id || "");
-  const [channelId, setChannelId] = useState(transaction?.channel_id || "");
+  const [channelId, setChannelId] = useState(transaction?.channel_id || defaultChannelId || "");
   const [note, setNote] = useState(transaction?.note || "");
   const [spentAt, setSpentAt] = useState(transaction?.spent_at || todayDate());
   const [type, setType] = useState<TransactionType>(transaction?.type || "expense");
@@ -52,6 +54,10 @@ export function TransactionForm({
     setType(nextType);
     const nextCategory = categories.find((category) => category.type === nextType);
     setCategoryId(nextCategory?.id || "");
+  }
+
+  function setQuickAmount(value: number) {
+    setAmount(formatNumberWithCommas(String(value)));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -102,15 +108,29 @@ export function TransactionForm({
     <Card>
       <form onSubmit={handleSubmit} className="space-y-4">
         <Field label="Amount">
-          <input
-            required
-            inputMode="numeric"
-            type="text"
-            value={amount}
-            onChange={(event) => setAmount(formatNumberWithCommas(event.target.value))}
-            className={`${inputClassName} text-2xl font-black`}
-            placeholder="50,000"
-          />
+          <div className="space-y-3">
+            <input
+              required
+              inputMode="numeric"
+              type="text"
+              value={amount}
+              onChange={(event) => setAmount(formatNumberWithCommas(event.target.value))}
+              className={`${inputClassName} text-2xl font-black`}
+              placeholder="50,000"
+            />
+            <div className="grid grid-cols-4 gap-2">
+              {[10000, 25000, 50000, 100000].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setQuickAmount(value)}
+                  className="rounded-xl bg-accent px-2 py-2 text-xs font-black text-primary-dark"
+                >
+                  {formatNumberWithCommas(String(value))}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
 
         <Field label="Type">

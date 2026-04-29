@@ -74,6 +74,31 @@ function CategoriesContent({ householdId }: { householdId: string }) {
     setRefreshKey((current) => current + 1);
   }
 
+  async function deleteCategory(id: string) {
+    const shouldDelete = window.confirm(
+      "Delete this category? This only works if no transactions or budgets use it."
+    );
+
+    if (!shouldDelete) {
+      return;
+    }
+
+    setMessage("");
+
+    const { error } = await supabase
+      .from("categories")
+      .delete()
+      .eq("id", id)
+      .eq("household_id", householdId);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setRefreshKey((current) => current + 1);
+  }
+
   return (
     <>
       <PageHeader eyebrow="Little jars" title="Categories" />
@@ -106,13 +131,22 @@ function CategoriesContent({ householdId }: { householdId: string }) {
                       <p className="font-black text-foreground">{category.name}</p>
                       <p className="mt-1 text-sm capitalize text-muted">{category.type}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(category.id)}
-                      className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark"
-                    >
-                      Edit
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(category.id)}
+                        className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteCategory(category.id)}
+                        className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 )}
               </Card>

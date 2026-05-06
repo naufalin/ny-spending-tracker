@@ -39,7 +39,7 @@ create table if not exists public.transactions (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references public.households(id) on delete cascade,
   user_id uuid references auth.users(id),
-  category_id uuid references public.categories(id),
+  category_id uuid references public.categories(id) on delete set null,
   channel_id uuid references public.channels(id),
   amount integer not null,
   type text not null check (type in ('expense', 'income')),
@@ -56,7 +56,7 @@ create table if not exists public.transfers (
   to_channel_id uuid not null references public.channels(id),
   amount integer not null check (amount > 0),
   fee_amount integer not null default 0 check (fee_amount >= 0),
-  fee_category_id uuid references public.categories(id),
+  fee_category_id uuid references public.categories(id) on delete set null,
   fee_transaction_id uuid references public.transactions(id) on delete set null,
   note text,
   transferred_at date not null default current_date,
@@ -75,6 +75,16 @@ create table if not exists public.budgets (
 
 create unique index if not exists budgets_household_category_month_key
   on public.budgets (household_id, category_id, month);
+
+alter table public.transactions
+  drop constraint if exists transactions_category_id_fkey,
+  add constraint transactions_category_id_fkey
+    foreign key (category_id) references public.categories(id) on delete set null;
+
+alter table public.transfers
+  drop constraint if exists transfers_fee_category_id_fkey,
+  add constraint transfers_fee_category_id_fkey
+    foreign key (fee_category_id) references public.categories(id) on delete set null;
 
 alter table public.households enable row level security;
 alter table public.household_members enable row level security;

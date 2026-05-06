@@ -11,10 +11,7 @@ export function TypeSelect({
   value: TransactionType;
   onChange: (value: TransactionType) => void;
 }) {
-  const [current, setCurrent] = useState<TransactionType>(value);
-
   function update(nextValue: TransactionType) {
-    setCurrent(nextValue);
     onChange(nextValue);
   }
 
@@ -26,7 +23,7 @@ export function TypeSelect({
           type="button"
           onClick={() => update(type)}
           className={
-            current === type
+            value === type
               ? "rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark shadow-sm"
               : "rounded-xl px-4 py-3 text-sm font-black text-muted"
           }

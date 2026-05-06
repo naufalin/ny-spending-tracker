@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, EmptyState, PageHeader, ProtectedPage } from "@/components/app-shell";
 import { CategoryForm } from "@/components/forms";
+import { classNames } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Category } from "@/types/database";
+import type { Category, TransactionType } from "@/types/database";
+
+type CategoryTypeFilter = "all" | TransactionType;
 
 function CategoriesContent({ householdId }: { householdId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -12,6 +15,7 @@ function CategoriesContent({ householdId }: { householdId: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [typeFilter, setTypeFilter] = useState<CategoryTypeFilter>("all");
 
   useEffect(() => {
     let isMounted = true;
@@ -35,6 +39,10 @@ function CategoriesContent({ householdId }: { householdId: string }) {
       isMounted = false;
     };
   }, [householdId, refreshKey, supabase]);
+
+  const filteredCategories = categories.filter(
+    (category) => typeFilter === "all" || category.type === typeFilter
+  );
 
   async function createCategory(values: Pick<Category, "name" | "type">) {
     setMessage("");
@@ -76,7 +84,7 @@ function CategoriesContent({ householdId }: { householdId: string }) {
 
   async function deleteCategory(id: string) {
     const shouldDelete = window.confirm(
-      "Delete this category? This only works if no transactions or budgets use it."
+      "Delete this jar? Past transactions will stay in your ledger without a jar."
     );
 
     if (!shouldDelete) {
@@ -84,6 +92,28 @@ function CategoriesContent({ householdId }: { householdId: string }) {
     }
 
     setMessage("");
+
+    const [transactionResult, transferResult] = await Promise.all([
+      supabase
+        .from("transactions")
+        .update({ category_id: null })
+        .eq("category_id", id)
+        .eq("household_id", householdId),
+      supabase
+        .from("transfers")
+        .update({ fee_category_id: null })
+        .eq("fee_category_id", id)
+        .eq("household_id", householdId),
+    ]);
+
+    if (transactionResult.error || transferResult.error) {
+      setMessage(
+        transactionResult.error?.message ||
+          transferResult.error?.message ||
+          "Unable to detach this jar from existing records."
+      );
+      return;
+    }
 
     const { error } = await supabase
       .from("categories")
@@ -109,14 +139,38 @@ function CategoriesContent({ householdId }: { householdId: string }) {
           {message ? <p className="mt-4 text-sm font-bold text-primary-dark">{message}</p> : null}
         </Card>
 
+        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-card p-1">
+          {[
+            ["all", "All"],
+            ["expense", "Expense"],
+            ["income", "Income"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTypeFilter(value as CategoryTypeFilter)}
+              className={classNames(
+                "rounded-xl px-4 py-3 text-sm font-black transition",
+                typeFilter === value
+                  ? "bg-accent text-primary-dark shadow-sm"
+                  : "text-muted hover:bg-background"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {categories.length === 0 ? (
           <EmptyState
             title="No jars yet"
             body="Try Coffee, Groceries, Transport, Bills, or Date Night."
           />
+        ) : filteredCategories.length === 0 ? (
+          <EmptyState title="No matching jars" body="Try another type filter." />
         ) : (
           <div className="space-y-3">
-            {categories.map((category) => (
+            {filteredCategories.map((category) => (
               <Card key={category.id}>
                 {editingId === category.id ? (
                   <CategoryForm

@@ -13,13 +13,17 @@ import {
 } from "@/components/app-shell";
 import { formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Budget, Category, Channel, Transaction } from "@/types/database";
+import type { Budget, Category, Channel, Transaction, Transfer } from "@/types/database";
 
 type CategoryTotal = {
   id?: string;
   name: string;
   amount: number;
 };
+
+type BalanceTransaction = Pick<Transaction, "channel_id" | "type" | "amount">;
+
+type BalanceTransfer = Pick<Transfer, "from_channel_id" | "to_channel_id" | "amount">;
 
 function getGreetingName(user: User) {
   const metadata = user.user_metadata || {};
@@ -35,12 +39,21 @@ function getGreetingName(user: User) {
 function DashboardContent({ householdId, user }: { householdId: string; user: User }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [balanceTransactions, setBalanceTransactions] = useState<BalanceTransaction[]>([]);
+  const [balanceTransfers, setBalanceTransfers] = useState<BalanceTransfer[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [seedMessage, setSeedMessage] = useState("");
+  const [numbersHidden, setNumbersHidden] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+
+    return window.localStorage.getItem("our-little-ledger-dashboard-numbers-hidden") === "true";
+  });
   const [setupDismissed, setSetupDismissed] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -54,7 +67,14 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     let isMounted = true;
 
     async function loadDashboard() {
-      const [transactionResult, budgetResult, categoryResult, channelResult] = await Promise.all([
+      const [
+        transactionResult,
+        balanceTransactionResult,
+        transferResult,
+        budgetResult,
+        categoryResult,
+        channelResult,
+      ] = await Promise.all([
         supabase
           .from("transactions")
           .select("*, categories(id, name, type), channels(id, name)")
@@ -63,16 +83,26 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           .lt("spent_at", nextMonthStart())
           .order("spent_at", { ascending: false }),
         supabase
+          .from("transactions")
+          .select("channel_id, type, amount")
+          .eq("household_id", householdId),
+        supabase
+          .from("transfers")
+          .select("from_channel_id, to_channel_id, amount")
+          .eq("household_id", householdId),
+        supabase
           .from("budgets")
           .select("*, categories(id, name, type)")
           .eq("household_id", householdId)
           .eq("month", monthStart()),
         supabase.from("categories").select("*").eq("household_id", householdId),
-        supabase.from("channels").select("*").eq("household_id", householdId),
+        supabase.from("channels").select("*").eq("household_id", householdId).order("name"),
       ]);
 
       if (isMounted) {
         setTransactions((transactionResult.data || []) as Transaction[]);
+        setBalanceTransactions((balanceTransactionResult.data || []) as BalanceTransaction[]);
+        setBalanceTransfers((transferResult.data || []) as BalanceTransfer[]);
         setBudgets((budgetResult.data || []) as Budget[]);
         setCategories((categoryResult.data || []) as Category[]);
         setChannels((channelResult.data || []) as Channel[]);
@@ -90,11 +120,26 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   async function refreshDashboard() {
     const [categoryResult, channelResult] = await Promise.all([
       supabase.from("categories").select("*").eq("household_id", householdId),
-      supabase.from("channels").select("*").eq("household_id", householdId),
+      supabase.from("channels").select("*").eq("household_id", householdId).order("name"),
     ]);
 
     setCategories((categoryResult.data || []) as Category[]);
     setChannels((channelResult.data || []) as Channel[]);
+  }
+
+  function formatDashboardMoney(amount: number) {
+    return numbersHidden ? "Rp ***" : formatIdr(amount);
+  }
+
+  function toggleNumbersHidden() {
+    setNumbersHidden((current) => {
+      const nextValue = !current;
+      window.localStorage.setItem(
+        "our-little-ledger-dashboard-numbers-hidden",
+        String(nextValue)
+      );
+      return nextValue;
+    });
   }
 
   const expenses = transactions.filter((transaction) => transaction.type === "expense");
@@ -130,6 +175,32 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const topChannels = Object.values(channelTotals)
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 4);
+
+  const walletBalances = channels.map((channel) => {
+    const transactionTotal = balanceTransactions
+      .filter((transaction) => transaction.channel_id === channel.id)
+      .reduce((sum, transaction) => {
+        return sum + (transaction.type === "income" ? transaction.amount : -transaction.amount);
+      }, 0);
+    const transferTotal = balanceTransfers.reduce((sum, transfer) => {
+      if (transfer.from_channel_id === channel.id) {
+        return sum - transfer.amount;
+      }
+
+      if (transfer.to_channel_id === channel.id) {
+        return sum + transfer.amount;
+      }
+
+      return sum;
+    }, 0);
+
+    return {
+      id: channel.id,
+      name: channel.name,
+      amount: transactionTotal + transferTotal,
+    };
+  });
+  const totalBalance = walletBalances.reduce((sum, wallet) => sum + wallet.amount, 0);
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0);
   const remainingBudget = totalBudget - monthTotal;
@@ -231,9 +302,19 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         eyebrow="Monthly garden"
         title={`Hello, ${greetingName}`}
         action={
-          <Link href="/transactions/new" className={buttonClassName}>
-            Add
-          </Link>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={toggleNumbersHidden}
+              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+              aria-label={numbersHidden ? "Show dashboard numbers" : "Hide dashboard numbers"}
+            >
+              {numbersHidden ? "Show" : "Hide"}
+            </button>
+            <Link href="/transactions/new" className={buttonClassName}>
+              Add
+            </Link>
+          </div>
         }
       />
 
@@ -294,7 +375,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           <div className="relative">
             <p className="text-sm font-black text-primary-dark">This month’s garden</p>
             <p className="mt-2 max-w-[15rem] text-4xl font-black leading-tight text-foreground">
-              {loading ? "..." : formatIdr(monthTotal)}
+              {loading ? "..." : formatDashboardMoney(monthTotal)}
             </p>
             <p className="mt-3 max-w-[15rem] text-sm leading-6 text-muted">
               Little expenses, big memories.
@@ -317,7 +398,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             </div>
             <p className="text-sm font-black text-muted">Today’s petals</p>
             <p className="mt-2 text-2xl font-black text-foreground">
-              {loading ? "..." : formatIdr(todayTotal)}
+              {loading ? "..." : formatDashboardMoney(todayTotal)}
             </p>
           </Card>
           <Card className="bg-[linear-gradient(160deg,#FFFFFF,#EEF6EA)]">
@@ -326,10 +407,45 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             </div>
             <p className="text-sm font-black text-muted">Coffee treats</p>
             <p className="mt-2 text-2xl font-black text-foreground">
-              {loading ? "..." : formatIdr(coffeeTotal)}
+              {loading ? "..." : formatDashboardMoney(coffeeTotal)}
             </p>
           </Card>
         </div>
+
+        <Card className="bg-[linear-gradient(160deg,#FFFFFF,#EEF6EA)]">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+              👛
+            </span>
+            <div>
+              <h2 className="text-lg font-black text-foreground">Total balance</h2>
+              <p className="text-sm text-muted">Across all wallets</p>
+            </div>
+          </div>
+          <p className="text-3xl font-black text-foreground">
+            {loading ? "..." : formatDashboardMoney(totalBalance)}
+          </p>
+          {walletBalances.length ? (
+            <div className="mt-4 space-y-3">
+              {walletBalances.map((wallet) => (
+                <div key={wallet.id} className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-bold text-foreground">{wallet.name}</span>
+                  <span
+                    className={
+                      wallet.amount < 0
+                        ? "text-sm font-black text-primary-dark"
+                        : "text-sm font-black text-secondary"
+                    }
+                  >
+                    {formatDashboardMoney(wallet.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-muted">Create a wallet to see balances here.</p>
+          )}
+        </Card>
 
         <Card>
           <div className="mb-4 flex items-center gap-2">
@@ -345,7 +461,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <span className="text-sm font-bold text-foreground">{category.name}</span>
                     <span className="text-sm font-black text-primary-dark">
-                      {formatIdr(category.amount)}
+                      {formatDashboardMoney(category.amount)}
                     </span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-background">
@@ -377,7 +493,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                 <div key={channel.name} className="flex items-center justify-between gap-3">
                   <span className="text-sm font-bold text-foreground">{channel.name}</span>
                   <span className="text-sm font-black text-primary-dark">
-                    {formatIdr(channel.amount)}
+                    {formatDashboardMoney(channel.amount)}
                   </span>
                 </div>
               ))}
@@ -398,7 +514,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             <>
               <p className="mt-2 text-sm text-muted">Remaining budget this month</p>
               <p className="mt-2 text-3xl font-black text-foreground">
-                {formatIdr(remainingBudget)}
+                {formatDashboardMoney(remainingBudget)}
               </p>
               <div className="mt-4 space-y-4">
                 {budgetProgress.map((budget) => {
@@ -409,7 +525,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <p className="text-sm font-black text-foreground">{budget.name}</p>
                         <p className="text-sm font-bold text-muted">
-                          {formatIdr(budget.remaining)} left
+                          {formatDashboardMoney(budget.remaining)} left
                         </p>
                       </div>
                       <div className="h-3 overflow-hidden rounded-full bg-background">
@@ -419,7 +535,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                         />
                       </div>
                       <p className="mt-1 text-xs font-bold text-muted">
-                        {formatIdr(budget.spent)} of {formatIdr(budget.amount)}
+                        {formatDashboardMoney(budget.spent)} of {formatDashboardMoney(budget.amount)}
                       </p>
                     </div>
                   );

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   Card,
@@ -10,12 +11,14 @@ import {
   buttonClassName,
   inputClassName,
 } from "@/components/app-shell";
+import { formatDate, formatIdr } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Channel } from "@/types/database";
+import type { Channel, Transfer } from "@/types/database";
 
 function ChannelsContent({ householdId }: { householdId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
@@ -27,14 +30,26 @@ function ChannelsContent({ householdId }: { householdId: string }) {
     let isMounted = true;
 
     async function loadChannels() {
-      const { data } = await supabase
-        .from("channels")
-        .select("*")
-        .eq("household_id", householdId)
-        .order("name");
+      const [channelResult, transferResult] = await Promise.all([
+        supabase
+          .from("channels")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+        supabase
+          .from("transfers")
+          .select(
+            "*, from_channel:channels!transfers_from_channel_id_fkey(id, name), to_channel:channels!transfers_to_channel_id_fkey(id, name)"
+          )
+          .eq("household_id", householdId)
+          .order("transferred_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
 
       if (isMounted) {
-        setChannels((data || []) as Channel[]);
+        setChannels((channelResult.data || []) as Channel[]);
+        setTransfers((transferResult.data || []) as Transfer[]);
       }
     }
 
@@ -113,7 +128,15 @@ function ChannelsContent({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader eyebrow="Money paths" title="Wallets" />
+      <PageHeader
+        eyebrow="Money paths"
+        title="Wallets"
+        action={
+          <Link href="/transfers/new" className={buttonClassName}>
+            Transfer
+          </Link>
+        }
+      />
 
       <div className="space-y-4">
         <Card>
@@ -194,6 +217,46 @@ function ChannelsContent({ householdId }: { householdId: string }) {
             ))}
           </div>
         )}
+
+        {transfers.length ? (
+          <Card>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-black text-foreground">Recent transfers</h2>
+              <Link href="/transfers/new" className="text-sm font-black text-primary-dark">
+                New
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {transfers.map((transfer) => (
+                <div
+                  key={transfer.id}
+                  className="rounded-2xl bg-background px-4 py-3 text-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black text-foreground">
+                        {transfer.from_channel?.name || "Source"} to{" "}
+                        {transfer.to_channel?.name || "Destination"}
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-muted">
+                        {formatDate(transfer.transferred_at)}
+                        {transfer.fee_amount > 0
+                          ? ` - fee ${formatIdr(transfer.fee_amount)}`
+                          : ""}
+                      </p>
+                    </div>
+                    <p className="text-right font-black text-secondary">
+                      {formatIdr(transfer.amount)}
+                    </p>
+                  </div>
+                  {transfer.note ? (
+                    <p className="mt-2 text-sm leading-6 text-muted">{transfer.note}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
       </div>
     </>
   );

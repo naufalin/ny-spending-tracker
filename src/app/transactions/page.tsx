@@ -167,9 +167,17 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         eyebrow="Spending basket"
         title="Spending basket"
         action={
-          <Link href="/transactions/new" className={buttonClassName}>
-            Add
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href="/transfers/new"
+              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+            >
+              Transfer
+            </Link>
+            <Link href="/transactions/new" className={buttonClassName}>
+              Add
+            </Link>
+          </div>
         }
       />
 

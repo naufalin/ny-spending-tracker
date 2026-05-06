@@ -48,6 +48,22 @@ create table if not exists public.transactions (
   created_at timestamptz default now()
 );
 
+create table if not exists public.transfers (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid references public.households(id) on delete cascade,
+  user_id uuid references auth.users(id),
+  from_channel_id uuid not null references public.channels(id),
+  to_channel_id uuid not null references public.channels(id),
+  amount integer not null check (amount > 0),
+  fee_amount integer not null default 0 check (fee_amount >= 0),
+  fee_category_id uuid references public.categories(id),
+  fee_transaction_id uuid references public.transactions(id) on delete set null,
+  note text,
+  transferred_at date not null default current_date,
+  created_at timestamptz default now(),
+  check (from_channel_id <> to_channel_id)
+);
+
 create table if not exists public.budgets (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references public.households(id) on delete cascade,
@@ -66,7 +82,33 @@ alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
 alter table public.channels enable row level security;
 alter table public.transactions enable row level security;
+alter table public.transfers enable row level security;
 alter table public.budgets enable row level security;
+
+drop policy if exists "Members can view their households" on public.households;
+drop policy if exists "Users can view their own household memberships" on public.household_members;
+drop policy if exists "Members can view household profiles" on public.profiles;
+drop policy if exists "Users can create their own profile" on public.profiles;
+drop policy if exists "Users can update their own profile" on public.profiles;
+drop policy if exists "Members can view categories" on public.categories;
+drop policy if exists "Members can create categories" on public.categories;
+drop policy if exists "Members can update categories" on public.categories;
+drop policy if exists "Members can delete categories" on public.categories;
+drop policy if exists "Members can view channels" on public.channels;
+drop policy if exists "Members can create channels" on public.channels;
+drop policy if exists "Members can update channels" on public.channels;
+drop policy if exists "Members can delete channels" on public.channels;
+drop policy if exists "Members can view transactions" on public.transactions;
+drop policy if exists "Members can create transactions" on public.transactions;
+drop policy if exists "Members can delete transactions" on public.transactions;
+drop policy if exists "Members can update transactions" on public.transactions;
+drop policy if exists "Members can view transfers" on public.transfers;
+drop policy if exists "Members can create transfers" on public.transfers;
+drop policy if exists "Members can delete transfers" on public.transfers;
+drop policy if exists "Members can update transfers" on public.transfers;
+drop policy if exists "Members can view budgets" on public.budgets;
+drop policy if exists "Members can create budgets" on public.budgets;
+drop policy if exists "Members can update budgets" on public.budgets;
 
 create policy "Members can view their households"
   on public.households
@@ -276,6 +318,63 @@ create policy "Members can update transactions"
       select 1
       from public.household_members
       where household_members.household_id = transactions.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view transfers"
+  on public.transfers
+  for select
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transfers.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can create transfers"
+  on public.transfers
+  for insert
+  with check (
+    user_id = auth.uid()
+    and exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transfers.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can delete transfers"
+  on public.transfers
+  for delete
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transfers.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can update transfers"
+  on public.transfers
+  for update
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transfers.household_id
+        and household_members.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = transfers.household_id
         and household_members.user_id = auth.uid()
     )
   );

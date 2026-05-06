@@ -47,6 +47,24 @@ export type Transaction = {
   channels?: Pick<Channel, "id" | "name"> | null;
 };
 
+export type Transfer = {
+  id: string;
+  household_id: string;
+  user_id: string | null;
+  from_channel_id: string;
+  to_channel_id: string;
+  amount: number;
+  fee_amount: number;
+  fee_category_id: string | null;
+  fee_transaction_id: string | null;
+  note: string | null;
+  transferred_at: string;
+  created_at: string | null;
+  from_channel?: Pick<Channel, "id" | "name"> | null;
+  to_channel?: Pick<Channel, "id" | "name"> | null;
+  fee_category?: Pick<Category, "id" | "name" | "type"> | null;
+};
+
 export type Budget = {
   id: string;
   household_id: string;
@@ -90,11 +108,22 @@ export type Database = {
       };
       transactions: {
         Row: Transaction;
-        Insert: Omit<Transaction, "id" | "created_at" | "categories"> & {
+        Insert: Omit<Transaction, "id" | "created_at" | "categories" | "channels"> & {
           id?: string;
           created_at?: string | null;
         };
-        Update: Partial<Omit<Transaction, "categories">>;
+        Update: Partial<Omit<Transaction, "categories" | "channels">>;
+      };
+      transfers: {
+        Row: Transfer;
+        Insert: Omit<
+          Transfer,
+          "id" | "created_at" | "from_channel" | "to_channel" | "fee_category"
+        > & {
+          id?: string;
+          created_at?: string | null;
+        };
+        Update: Partial<Omit<Transfer, "from_channel" | "to_channel" | "fee_category">>;
       };
       budgets: {
         Row: Budget;

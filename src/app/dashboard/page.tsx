@@ -21,9 +21,24 @@ type CategoryTotal = {
   amount: number;
 };
 
+type CategoryChartSlice = CategoryTotal & {
+  color: string;
+  percent: number;
+};
+
 type BalanceTransaction = Pick<Transaction, "channel_id" | "type" | "amount">;
 
 type BalanceTransfer = Pick<Transfer, "from_channel_id" | "to_channel_id" | "amount">;
+
+const categoryChartColors = ["#D96F91", "#A8C7A1", "#F0B45F", "#A8B6E8", "#C99AD8", "#8DC7BC"];
+
+function formatCategoryPercent(percent: number) {
+  if (percent > 0 && percent < 1) {
+    return "<1%";
+  }
+
+  return `${Math.round(percent)}%`;
+}
 
 function getGreetingName(user: User) {
   const metadata = user.user_metadata || {};
@@ -34,6 +49,73 @@ function getGreetingName(user: User) {
     user.email?.split("@")[0];
 
   return typeof name === "string" && name.trim() ? name.trim() : "home";
+}
+
+function CategoryDonutChart({
+  slices,
+  total,
+  totalLabel,
+}: {
+  slices: CategoryChartSlice[];
+  total: number;
+  totalLabel: string;
+}) {
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+
+  return (
+    <div className="relative mx-auto aspect-square w-full max-w-[16rem]">
+      <svg
+        viewBox="0 0 120 120"
+        role="img"
+        aria-label={`Monthly spending by jar. Total ${totalLabel}.`}
+        className="h-full w-full drop-shadow-[0_14px_24px_rgba(217,111,145,0.16)]"
+      >
+        <circle
+          cx="60"
+          cy="60"
+          r={radius}
+          fill="none"
+          stroke="#FFF9F2"
+          strokeWidth="18"
+        />
+        {slices.map((slice, index) => {
+          const sliceLength = total > 0 ? (slice.amount / total) * circumference : 0;
+          const sliceOffset = slices
+            .slice(0, index)
+            .reduce((sum, previousSlice) => sum + (previousSlice.amount / total) * circumference, 0);
+          const sliceGap = sliceLength > 2.5 && slices.length > 1 ? 1.5 : 0;
+          const dashArray =
+            slices.length === 1
+              ? `${circumference} 0`
+              : `${Math.max(0, sliceLength - sliceGap)} ${circumference}`;
+
+          return (
+            <circle
+              key={slice.name}
+              cx="60"
+              cy="60"
+              r={radius}
+              fill="none"
+              stroke={slice.color}
+              strokeWidth="18"
+              strokeDasharray={dashArray}
+              strokeDashoffset={-sliceOffset}
+              strokeLinecap={slices.length === 1 ? "round" : "butt"}
+              transform="rotate(-90 60 60)"
+            />
+          );
+        })}
+        <circle cx="60" cy="60" r="25" fill="#FFFFFF" opacity="0.92" />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
+        <p className="text-[11px] font-black uppercase tracking-normal text-muted">Total</p>
+        <p className="mt-1 max-w-full text-xl font-black leading-tight text-foreground">
+          {totalLabel}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function DashboardContent({ householdId, user }: { householdId: string; user: User }) {
@@ -168,9 +250,22 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     return acc;
   }, {});
 
-  const topCategories = Object.values(categoryTotals)
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 4);
+  const sortedCategories = Object.values(categoryTotals).sort((a, b) => b.amount - a.amount);
+
+  const categoryChartItems = sortedCategories.slice(0, 5);
+  const otherCategoriesTotal = sortedCategories
+    .slice(5)
+    .reduce((sum, category) => sum + category.amount, 0);
+  const categoryChartSlices: CategoryChartSlice[] = [
+    ...categoryChartItems,
+    ...(otherCategoriesTotal > 0
+      ? [{ name: "Other", amount: otherCategoriesTotal } satisfies CategoryTotal]
+      : []),
+  ].map((category, index) => ({
+    ...category,
+    color: categoryChartColors[index % categoryChartColors.length],
+    percent: monthTotal > 0 ? (category.amount / monthTotal) * 100 : 0,
+  }));
 
   const topChannels = Object.values(channelTotals)
     .sort((a, b) => b.amount - a.amount)
@@ -447,33 +542,59 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           )}
         </Card>
 
-        <Card>
+        <Card className="overflow-hidden bg-[linear-gradient(180deg,#FFFFFF,#FFF9F2)]">
           <div className="mb-4 flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
               🫙
             </span>
-            <h2 className="text-lg font-black text-foreground">Favorite jars</h2>
+            <div>
+              <h2 className="text-lg font-black text-foreground">Spending by jar</h2>
+              <p className="text-sm text-muted">This month’s category mix</p>
+            </div>
           </div>
-          {topCategories.length ? (
-            <div className="mt-4 space-y-3">
-              {topCategories.map((category) => (
-                <div key={category.name}>
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <span className="text-sm font-bold text-foreground">{category.name}</span>
-                    <span className="text-sm font-black text-primary-dark">
-                      {formatDashboardMoney(category.amount)}
-                    </span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-background">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{
-                        width: `${Math.max(8, Math.round((category.amount / monthTotal) * 100))}%`,
-                      }}
+          {categoryChartSlices.length && monthTotal > 0 ? (
+            <div className="mt-5">
+              <CategoryDonutChart
+                slices={categoryChartSlices}
+                total={monthTotal}
+                totalLabel={formatDashboardMoney(monthTotal)}
+              />
+              <div className="mt-5 space-y-3">
+                {categoryChartSlices.map((category) => (
+                  <div key={category.name} className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full shadow-[0_0_0_4px_rgba(255,249,242,0.9)]"
+                      style={{ backgroundColor: category.color }}
+                      aria-hidden="true"
                     />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="truncate text-sm font-black text-foreground">
+                          {category.name}
+                        </span>
+                        <span className="shrink-0 text-sm font-black text-primary-dark">
+                          {formatDashboardMoney(category.amount)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${category.percent}%`,
+                              minWidth: category.percent > 0 ? "2px" : undefined,
+                              backgroundColor: category.color,
+                            }}
+                          />
+                        </div>
+                        <span className="w-10 text-right text-xs font-black text-muted">
+                          {formatCategoryPercent(category.percent)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : (
             <p className="mt-3 text-sm text-muted">No spending yet today. A fresh lily garden 🌸</p>

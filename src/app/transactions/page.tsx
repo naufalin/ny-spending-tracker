@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, EmptyState, Field, PageHeader, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
 import { formatDate, formatIdr, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { GoogleSheetsSyncButton } from "@/components/google-sheets-sync-button";
 import type { Category, Channel, Profile, Transaction, TransactionType } from "@/types/database";
 
 function TransactionsContent({ householdId, userId }: { householdId: string; userId: string }) {
@@ -167,7 +168,9 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         eyebrow="Spending basket"
         title="Spending basket"
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-col items-end gap-2">
+            <GoogleSheetsSyncButton householdId={householdId} />
+            <div className="flex gap-2">
             <Link
               href="/transfers/new"
               className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
@@ -177,6 +180,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
             <Link href="/transactions/new" className={buttonClassName}>
               Add
             </Link>
+            </div>
           </div>
         }
       />

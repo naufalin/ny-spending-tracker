@@ -75,6 +75,20 @@ export type Budget = {
   categories?: Pick<Category, "id" | "name" | "type"> | null;
 };
 
+export type GoogleSheetsConnection = {
+  household_id: string;
+  spreadsheet_id: string | null;
+  spreadsheet_name: string | null;
+  connected_by: string | null;
+  encrypted_refresh_token: string;
+  connected_at: string;
+  updated_at: string;
+  last_sync_at: string | null;
+  last_sync_status: "success" | "error" | null;
+  last_sync_summary: Record<string, number> | null;
+  last_sync_error: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -132,6 +146,14 @@ export type Database = {
           created_at?: string | null;
         };
         Update: Partial<Omit<Budget, "categories">>;
+      };
+      google_sheets_connections: {
+        Row: GoogleSheetsConnection;
+        Insert: Omit<GoogleSheetsConnection, "connected_at" | "updated_at"> & {
+          connected_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<GoogleSheetsConnection>;
       };
     };
   };

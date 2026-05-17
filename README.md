@@ -23,6 +23,21 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 ```
 
+To enable Google Sheets sync, also add:
+
+```env
+SUPABASE_SERVICE_ROLE_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://localhost:3000/api/google-sheets/oauth/callback
+GOOGLE_PICKER_API_KEY=
+GOOGLE_PICKER_APP_ID=
+GOOGLE_TOKEN_ENCRYPTION_SECRET=
+GOOGLE_OAUTH_STATE_SECRET=
+```
+
+Create a Google Cloud OAuth web client with the redirect URI above, enable Google Sheets API and Google Picker API, and keep `GOOGLE_TOKEN_ENCRYPTION_SECRET` plus `GOOGLE_OAUTH_STATE_SECRET` as private server-only values.
+
 4. Start the app:
 
 ```bash

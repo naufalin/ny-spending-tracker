@@ -73,6 +73,20 @@ create table if not exists public.budgets (
   created_at timestamptz default now()
 );
 
+create table if not exists public.google_sheets_connections (
+  household_id uuid primary key references public.households(id) on delete cascade,
+  spreadsheet_id text,
+  spreadsheet_name text,
+  connected_by uuid references auth.users(id),
+  encrypted_refresh_token text not null,
+  connected_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  last_sync_at timestamptz,
+  last_sync_status text check (last_sync_status in ('success', 'error')),
+  last_sync_summary jsonb,
+  last_sync_error text
+);
+
 create unique index if not exists budgets_household_category_month_key
   on public.budgets (household_id, category_id, month);
 
@@ -94,6 +108,7 @@ alter table public.channels enable row level security;
 alter table public.transactions enable row level security;
 alter table public.transfers enable row level security;
 alter table public.budgets enable row level security;
+alter table public.google_sheets_connections enable row level security;
 
 drop policy if exists "Members can view their households" on public.households;
 drop policy if exists "Users can view their own household memberships" on public.household_members;
@@ -119,6 +134,7 @@ drop policy if exists "Members can update transfers" on public.transfers;
 drop policy if exists "Members can view budgets" on public.budgets;
 drop policy if exists "Members can create budgets" on public.budgets;
 drop policy if exists "Members can update budgets" on public.budgets;
+drop policy if exists "Members can view google sheet connection" on public.google_sheets_connections;
 
 create policy "Members can view their households"
   on public.households
@@ -171,6 +187,18 @@ create policy "Members can view categories"
       select 1
       from public.household_members
       where household_members.household_id = categories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view google sheet connection"
+  on public.google_sheets_connections
+  for select
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = google_sheets_connections.household_id
         and household_members.user_id = auth.uid()
     )
   );

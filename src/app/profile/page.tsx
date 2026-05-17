@@ -10,6 +10,7 @@ import {
   inputClassName,
 } from "@/components/app-shell";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { GoogleSheetsSettings } from "@/components/google-sheets-settings";
 import type { Channel, Profile } from "@/types/database";
 
 function ProfileContent({
@@ -138,6 +139,8 @@ function ProfileContent({
             </button>
           </form>
         </Card>
+
+        <GoogleSheetsSettings householdId={householdId} />
 
         <button
           type="button"

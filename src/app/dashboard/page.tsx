@@ -131,10 +131,10 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const [seedMessage, setSeedMessage] = useState("");
   const [numbersHidden, setNumbersHidden] = useState(() => {
     if (typeof window === "undefined") {
-      return false;
+      return true;
     }
 
-    return window.localStorage.getItem("our-little-ledger-dashboard-numbers-hidden") === "true";
+    return window.localStorage.getItem("our-little-ledger-dashboard-numbers-hidden") !== "false";
   });
   const [setupDismissed, setSetupDismissed] = useState(() => {
     if (typeof window === "undefined") {
@@ -390,19 +390,9 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         eyebrow="Monthly garden"
         title={`Hello, ${greetingName}`}
         action={
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={toggleNumbersHidden}
-              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
-              aria-label={numbersHidden ? "Show dashboard numbers" : "Hide dashboard numbers"}
-            >
-              {numbersHidden ? "Show" : "Hide"}
-            </button>
-            <Link href="/transactions/new" className={buttonClassName}>
-              Add
-            </Link>
-          </div>
+          <Link href="/transactions/new" className={buttonClassName}>
+            Add
+          </Link>
         }
       />
 
@@ -461,10 +451,30 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             🌸
           </div>
           <div className="relative">
-            <p className="text-sm font-black text-primary-dark">This month’s garden</p>
-            <p className="mt-2 max-w-[15rem] text-4xl font-black leading-tight text-foreground">
-              {loading ? "..." : formatDashboardMoney(monthTotal)}
-            </p>
+            <p className="text-sm font-black text-primary-dark">This month's garden</p>
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleNumbersHidden}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted transition hover:bg-accent hover:text-primary-dark"
+                aria-label={numbersHidden ? "Show numbers" : "Hide numbers"}
+              >
+                {numbersHidden ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path fillRule="evenodd" d="M3.28 2.22a.75.75 0 0 0-1.06 1.06l14.5 14.5a.75.75 0 1 0 1.06-1.06l-1.745-1.745a10.03 10.03 0 0 0 3.3-4.38 1.651 1.651 0 0 0 0-1.185A10.03 10.03 0 0 0 9.63 3.465a1.65 1.65 0 0 0-1.185 0c-1.13.26-2.21.7-3.2 1.28L3.28 2.22ZM6.97 6.97a5 5 0 0 1 6.06 6.06l-6.06-6.06Zm2.12 3.54a5 5 0 0 0-2.12-2.12l-1.8 1.8a7.502 7.502 0 0 1 3.92-3.92l-1.8 1.8a5 5 0 0 0 2.12 2.12l1.8-1.8a7.502 7.502 0 0 1-3.92 3.92l1.8-1.8Z" clipRule="evenodd" />
+                    <path d="M10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                  </svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">
+                    <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
+                    <path fillRule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clipRule="evenodd" />
+                  </svg>
+                )}
+              </button>
+              <p className="text-4xl font-black leading-tight text-foreground">
+                {loading ? "..." : formatDashboardMoney(monthTotal)}
+              </p>
+            </div>
             <p className="mt-3 max-w-[15rem] text-sm leading-6 text-muted">
               Little expenses, big memories.
             </p>

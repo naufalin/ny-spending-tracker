@@ -139,21 +139,21 @@ export default function LoginPage() {
             </Field>
 
             <button
-              type="button"
-              onClick={sendMagicLink}
+              type="submit"
               disabled={loading}
               className={`${buttonClassName} w-full`}
             >
-              Send cozy login link
+              Enter garden
             </button>
 
             <div className="grid grid-cols-2 gap-3">
               <button
-                type="submit"
+                type="button"
+                onClick={sendMagicLink}
                 disabled={loading}
                 className="min-h-12 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-foreground transition hover:bg-accent disabled:opacity-60"
               >
-                Enter garden
+                Send login link
               </button>
               <button
                 type="button"

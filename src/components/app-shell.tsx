@@ -9,6 +9,7 @@ import { classNames } from "@/lib/utils";
 
 type AppShellProps = {
   children: React.ReactNode;
+  user?: User | null;
 };
 
 type HouseholdContext = {
@@ -24,11 +25,11 @@ type ProtectedPageProps = {
 const navItems = [
   { href: "/dashboard", label: "Garden", icon: "🌸" },
   { href: "/transactions", label: "Spend", icon: "🧺" },
+  { href: "/categories", label: "Jars", icon: "🫙" },
   { href: "/channels", label: "Wallets", icon: "👛" },
-  { href: "/profile", label: "Me", icon: "☺️" },
 ];
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
 
   return (
@@ -36,6 +37,17 @@ export function AppShell({ children }: AppShellProps) {
       <div className="pointer-events-none absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
       <div className="pointer-events-none absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col">
+        {user ? (
+          <Link
+            href="/profile"
+            className="fixed right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-card/90 text-sm font-black text-muted shadow-sm backdrop-blur transition hover:bg-accent hover:text-primary-dark"
+            aria-label="Profile"
+          >
+            {(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "U")
+              .charAt(0)
+              .toUpperCase()}
+          </Link>
+        ) : null}
         <main className="relative z-10 flex-1 px-4 pb-32 pt-5">{children}</main>
         <nav className="fixed inset-x-0 bottom-0 z-20 px-3 pb-3">
           <div className="mx-auto max-w-md rounded-[1.75rem] border border-border bg-card/95 px-3 py-3 shadow-[0_-12px_34px_rgba(217,111,145,0.16)] backdrop-blur">
@@ -209,7 +221,7 @@ export function ProtectedPage({
     return null;
   }
 
-  return <AppShell>{children({ context })}</AppShell>;
+  return <AppShell user={context.user}>{children({ context })}</AppShell>;
 }
 
 export function PageHeader({

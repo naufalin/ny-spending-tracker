@@ -9,7 +9,6 @@ import {
   PageHeader,
   ProtectedPage,
   buttonClassName,
-  secondaryButtonClassName,
 } from "@/components/app-shell";
 import { formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -504,14 +503,6 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             <p className="mt-3 max-w-[15rem] text-sm leading-6 text-muted">
               Little expenses, big memories.
             </p>
-            <div className="mt-5 flex gap-2">
-              <Link href="/categories" className={secondaryButtonClassName}>
-                Jars
-              </Link>
-              <Link href="/budgets" className={secondaryButtonClassName}>
-                Garden plan
-              </Link>
-            </div>
           </div>
         </Card>
 

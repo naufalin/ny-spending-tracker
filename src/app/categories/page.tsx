@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, PageHeader, ProtectedPage } from "@/components/app-shell";
+import Link from "next/link";
+import { Card, EmptyState, PageHeader, ProtectedPage, secondaryButtonClassName } from "@/components/app-shell";
 import { CategoryForm } from "@/components/forms";
 import { classNames } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -131,7 +132,15 @@ function CategoriesContent({ householdId }: { householdId: string }) {
 
   return (
     <>
-      <PageHeader eyebrow="Little jars" title="Spending jars" />
+      <PageHeader
+        eyebrow="Little jars"
+        title="Spending jars"
+        action={
+          <Link href="/budgets" className={secondaryButtonClassName}>
+            Budgets
+          </Link>
+        }
+      />
 
       <div className="space-y-4">
         <Card>

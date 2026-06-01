@@ -10,7 +10,7 @@ import {
   ProtectedPage,
   buttonClassName,
 } from "@/components/app-shell";
-import { formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
+import { classNames, formatDate, formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Budget, Category, Channel, Transaction, Transfer } from "@/types/database";
 
@@ -139,6 +139,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const [jarTransactions, setJarTransactions] = useState<Transaction[]>([]);
   const [jarLoading, setJarLoading] = useState(false);
   const [jarExpanded, setJarExpanded] = useState(false);
+  const [selectedJarId, setSelectedJarId] = useState<string | null>(null);
   const [setupDismissed, setSetupDismissed] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -216,6 +217,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     let isMounted = true;
     setJarLoading(true);
     setJarExpanded(false);
+    setSelectedJarId(null);
 
     const monthDate = new Date(`${selectedMonth}-01T00:00:00`);
     const start = `${selectedMonth}-01`;
@@ -575,46 +577,91 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                 total={jarTotal}
                 totalLabel={formatDashboardMoney(jarTotal)}
               />
-              <div className="mt-5 space-y-3">
-                {(jarExpanded ? categoryChartSlices : categoryChartSlices.slice(0, 5)).map((category) => (
-                  <div key={category.name} className="flex items-center gap-3">
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full shadow-[0_0_0_4px_rgba(255,249,242,0.9)]"
-                      style={{ backgroundColor: category.color }}
-                      aria-hidden="true"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="truncate text-sm font-black text-foreground">
-                          {category.name}
-                        </span>
-                        <span className="shrink-0 text-sm font-black text-primary-dark">
-                          {formatDashboardMoney(category.amount)}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${category.percent}%`,
-                              minWidth: category.percent > 0 ? "2px" : undefined,
-                              backgroundColor: category.color,
-                            }}
-                          />
+              <div className="mt-5 space-y-1">
+                {(jarExpanded ? categoryChartSlices : categoryChartSlices.slice(0, 5)).map((category) => {
+                  const isSelected = selectedJarId === category.id;
+                  const jarTxns = isSelected
+                    ? jarTransactions.filter((t) => t.category_id === category.id)
+                    : [];
+
+                  return (
+                    <div key={category.name}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedJarId(isSelected ? null : (category.id || null))}
+                        className="flex w-full items-center gap-3 rounded-2xl px-2 py-2 text-left transition hover:bg-background"
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full shadow-[0_0_0_4px_rgba(255,249,242,0.9)]"
+                          style={{ backgroundColor: category.color }}
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="truncate text-sm font-black text-foreground">
+                              {category.name}
+                            </span>
+                            <span className="shrink-0 text-sm font-black text-primary-dark">
+                              {formatDashboardMoney(category.amount)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center gap-2">
+                            <div className="h-2 flex-1 overflow-hidden rounded-full bg-background">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${category.percent}%`,
+                                  minWidth: category.percent > 0 ? "2px" : undefined,
+                                  backgroundColor: category.color,
+                                }}
+                              />
+                            </div>
+                            <span className="w-10 text-right text-xs font-black text-muted">
+                              {formatCategoryPercent(category.percent)}
+                            </span>
+                          </div>
                         </div>
-                        <span className="w-10 text-right text-xs font-black text-muted">
-                          {formatCategoryPercent(category.percent)}
-                        </span>
-                      </div>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          className={classNames(
+                            "h-4 w-4 shrink-0 text-muted transition-transform",
+                            isSelected ? "rotate-180" : ""
+                          )}
+                        >
+                          <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      {isSelected ? (
+                        <div className="ml-5 space-y-1 border-l-2 border-border pl-3 pb-2">
+                          {jarTxns.length === 0 ? (
+                            <p className="py-2 text-xs text-muted">No transactions.</p>
+                          ) : (
+                            jarTxns.map((txn) => (
+                              <div key={txn.id} className="flex items-center justify-between gap-2 py-1.5">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm text-foreground">
+                                    {txn.note || txn.channels?.name || "—"}
+                                  </p>
+                                  <p className="text-xs text-muted">{formatDate(txn.spent_at)}</p>
+                                </div>
+                                <span className="shrink-0 text-sm font-black text-primary-dark">
+                                  -{formatIdr(txn.amount)}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {categoryChartSlices.length > 5 ? (
                   <button
                     type="button"
                     onClick={() => setJarExpanded((current) => !current)}
-                    className="w-full rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
+                    className="mt-2 w-full rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
                   >
                     {jarExpanded ? "Show less" : `Show all ${categoryChartSlices.length} jars`}
                   </button>

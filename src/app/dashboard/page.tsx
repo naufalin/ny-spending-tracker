@@ -136,6 +136,10 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
     return window.localStorage.getItem("our-little-ledger-dashboard-numbers-hidden") !== "false";
   });
+  const [selectedMonth, setSelectedMonth] = useState(() => monthStart().slice(0, 7));
+  const [jarTransactions, setJarTransactions] = useState<Transaction[]>([]);
+  const [jarLoading, setJarLoading] = useState(false);
+  const [jarExpanded, setJarExpanded] = useState(false);
   const [setupDismissed, setSetupDismissed] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -209,6 +213,35 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     setChannels((channelResult.data || []) as Channel[]);
   }
 
+  useEffect(() => {
+    let isMounted = true;
+    setJarLoading(true);
+    setJarExpanded(false);
+
+    const monthDate = new Date(`${selectedMonth}-01T00:00:00`);
+    const start = `${selectedMonth}-01`;
+    const end = nextMonthStart(monthDate);
+
+    supabase
+      .from("transactions")
+      .select("*, categories(id, name, type)")
+      .eq("household_id", householdId)
+      .eq("type", "expense")
+      .gte("spent_at", start)
+      .lt("spent_at", end)
+      .order("spent_at", { ascending: false })
+      .then(({ data }) => {
+        if (isMounted) {
+          setJarTransactions((data || []) as Transaction[]);
+          setJarLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [householdId, selectedMonth, supabase]);
+
   function formatDashboardMoney(amount: number) {
     return numbersHidden ? "Rp ***" : formatIdr(amount);
   }
@@ -229,12 +262,14 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const todayTotal = expenses
     .filter((transaction) => transaction.spent_at === todayDate())
     .reduce((sum, transaction) => sum + transaction.amount, 0);
-  const categoryTotals = expenses.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
+  const categoryTotals = jarTransactions.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
     const name = transaction.categories?.name || "Uncategorized";
     acc[name] = acc[name] || { id: transaction.category_id || undefined, name, amount: 0 };
     acc[name].amount += transaction.amount;
     return acc;
   }, {});
+
+  const jarTotal = jarTransactions.reduce((sum, transaction) => sum + transaction.amount, 0);
 
   const channelTotals = expenses.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
     const name = transaction.channels?.name || "No channel";
@@ -245,19 +280,10 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
   const sortedCategories = Object.values(categoryTotals).sort((a, b) => b.amount - a.amount);
 
-  const categoryChartItems = sortedCategories.slice(0, 5);
-  const otherCategoriesTotal = sortedCategories
-    .slice(5)
-    .reduce((sum, category) => sum + category.amount, 0);
-  const categoryChartSlices: CategoryChartSlice[] = [
-    ...categoryChartItems,
-    ...(otherCategoriesTotal > 0
-      ? [{ name: "Other", amount: otherCategoriesTotal } satisfies CategoryTotal]
-      : []),
-  ].map((category, index) => ({
+  const categoryChartSlices: CategoryChartSlice[] = sortedCategories.map((category, index) => ({
     ...category,
     color: categoryChartColors[index % categoryChartColors.length],
-    percent: monthTotal > 0 ? (category.amount / monthTotal) * 100 : 0,
+    percent: jarTotal > 0 ? (category.amount / jarTotal) * 100 : 0,
   }));
 
   const topChannels = Object.values(channelTotals)
@@ -535,24 +561,31 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         </Card>
 
         <Card className="overflow-hidden bg-[linear-gradient(180deg,#FFFFFF,#FFF9F2)]">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-              🫙
-            </span>
-            <div>
-              <h2 className="text-lg font-black text-foreground">Spending by jar</h2>
-              <p className="text-sm text-muted">This month’s category mix</p>
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+                🫙
+              </span>
+              <div>
+                <h2 className="text-lg font-black text-foreground">Spending by jar</h2>
+              </div>
             </div>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              className="rounded-xl border border-border bg-white/60 px-2 py-1 text-xs font-bold text-muted outline-none focus:border-primary-dark focus:ring-2 focus:ring-accent"
+            />
           </div>
-          {categoryChartSlices.length && monthTotal > 0 ? (
+          {categoryChartSlices.length && jarTotal > 0 ? (
             <div className="mt-5">
               <CategoryDonutChart
                 slices={categoryChartSlices}
-                total={monthTotal}
-                totalLabel={formatDashboardMoney(monthTotal)}
+                total={jarTotal}
+                totalLabel={formatDashboardMoney(jarTotal)}
               />
               <div className="mt-5 space-y-3">
-                {categoryChartSlices.map((category) => (
+                {(jarExpanded ? categoryChartSlices : categoryChartSlices.slice(0, 5)).map((category) => (
                   <div key={category.name} className="flex items-center gap-3">
                     <span
                       className="h-3 w-3 shrink-0 rounded-full shadow-[0_0_0_4px_rgba(255,249,242,0.9)]"
@@ -586,10 +619,21 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                     </div>
                   </div>
                 ))}
+                {categoryChartSlices.length > 5 ? (
+                  <button
+                    type="button"
+                    onClick={() => setJarExpanded((current) => !current)}
+                    className="w-full rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
+                  >
+                    {jarExpanded ? "Show less" : `Show all ${categoryChartSlices.length} jars`}
+                  </button>
+                ) : null}
               </div>
             </div>
+          ) : jarLoading ? (
+            <p className="mt-3 text-sm text-muted">Loading jar data...</p>
           ) : (
-            <p className="mt-3 text-sm text-muted">No spending yet today. A fresh lily garden 🌸</p>
+            <p className="mt-3 text-sm text-muted">No spending for this month yet. 🌸</p>
           )}
         </Card>
 

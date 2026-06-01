@@ -1,8 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { buttonClassName, Field, inputClassName } from "@/components/app-shell";
 import type { TransactionType } from "@/types/database";
+
+const categorySchema = z.object({
+  name: z.string().min(1, "Enter a category name."),
+  type: z.enum(["expense", "income"]),
+});
+
+type CategoryFormInput = z.input<typeof categorySchema>;
 
 export function TypeSelect({
   value,
@@ -11,17 +20,13 @@ export function TypeSelect({
   value: TransactionType;
   onChange: (value: TransactionType) => void;
 }) {
-  function update(nextValue: TransactionType) {
-    onChange(nextValue);
-  }
-
   return (
     <div className="grid grid-cols-2 gap-2 rounded-2xl bg-background p-1">
       {(["expense", "income"] as const).map((type) => (
         <button
           key={type}
           type="button"
-          onClick={() => update(type)}
+          onClick={() => onChange(type)}
           className={
             value === type
               ? "rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark shadow-sm"
@@ -46,38 +51,58 @@ export function CategoryForm({
   defaultType?: TransactionType;
   onSubmit: (values: { name: string; type: TransactionType }) => Promise<void>;
 }) {
-  const [name, setName] = useState(defaultName);
-  const [type, setType] = useState<TransactionType>(defaultType);
-  const [saving, setSaving] = useState(false);
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<CategoryFormInput>({
+    resolver: zodResolver(categorySchema),
+    defaultValues: {
+      name: defaultName,
+      type: defaultType,
+    },
+  });
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    await onSubmit({ name, type });
-    setSaving(false);
+  const type = watch("type");
+
+  async function handleFormSubmit(data: CategoryFormInput) {
+    await onSubmit({ name: data.name, type: data.type });
 
     if (!defaultName) {
-      setName("");
-      setType("expense");
+      reset({ name: "", type: "expense" });
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <Field label="Category name">
         <input
-          required
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          {...register("name")}
           className={inputClassName}
-          placeholder="Coffee, groceries, date night"
+          placeholder="Groceries, transport, date night"
         />
+        {errors.name ? (
+          <p className="mt-1 text-sm font-bold text-primary-dark">{errors.name.message}</p>
+        ) : null}
       </Field>
       <Field label="Type">
-        <TypeSelect value={type} onChange={setType} />
+        <Controller
+          control={control}
+          name="type"
+          render={() => (
+            <TypeSelect
+              value={type}
+              onChange={(nextType) => setValue("type", nextType)}
+            />
+          )}
+        />
       </Field>
-      <button disabled={saving} className={`${buttonClassName} w-full`}>
-        {saving ? "Saving..." : buttonLabel}
+      <button disabled={isSubmitting} className={`${buttonClassName} w-full`}>
+        {isSubmitting ? "Saving..." : buttonLabel}
       </button>
     </form>
   );

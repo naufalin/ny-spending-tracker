@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   Card,
   EmptyState,
@@ -11,7 +14,26 @@ import {
 import { formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
 import type { Category, Channel } from "@/types/database";
 
-type TransferFormValues = {
+const transferSchema = z
+  .object({
+    amount: z
+      .string()
+      .min(1, "Enter an amount.")
+      .refine((val) => parseFormattedNumber(val) >= 1, "Amount should be at least 1 IDR."),
+    fromChannelId: z.string().min(1, "Choose a source wallet."),
+    toChannelId: z.string().min(1, "Choose a destination wallet."),
+    feeAmount: z.string().optional(),
+    feeCategoryId: z.string().optional(),
+    note: z.string().optional(),
+    transferredAt: z.string().min(1, "Pick a date."),
+  })
+  .refine((data) => data.fromChannelId !== data.toChannelId, {
+    message: "Choose two different wallets.",
+    path: ["toChannelId"],
+  });
+
+type TransferFormInput = z.input<typeof transferSchema>;
+type TransferFormOutput = {
   amount: number;
   fromChannelId: string;
   toChannelId: string;
@@ -32,64 +54,51 @@ export function TransferForm({
   channels: Channel[];
   submitLabel: string;
   successMessage?: string;
-  onSubmit: (values: TransferFormValues) => Promise<string | null>;
+  onSubmit: (values: TransferFormOutput) => Promise<string | null>;
 }) {
-  const [amount, setAmount] = useState("");
-  const [fromChannelId, setFromChannelId] = useState(channels[0]?.id || "");
-  const [toChannelId, setToChannelId] = useState(channels[1]?.id || "");
-  const [feeAmount, setFeeAmount] = useState("");
-  const [feeCategoryId, setFeeCategoryId] = useState("");
-  const [note, setNote] = useState("");
-  const [transferredAt, setTransferredAt] = useState(todayDate());
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<TransferFormInput>({
+    resolver: zodResolver(transferSchema),
+    defaultValues: {
+      amount: "",
+      fromChannelId: channels[0]?.id || "",
+      toChannelId: channels[1]?.id || "",
+      feeAmount: "",
+      feeCategoryId: "",
+      note: "",
+      transferredAt: todayDate(),
+    },
+  });
+
   const [saved, setSaved] = useState(false);
-
   const expenseCategories = categories.filter((category) => category.type === "expense");
-  const selectedFromChannelId = fromChannelId || channels[0]?.id || "";
-  const selectedToChannelId = toChannelId || channels[1]?.id || "";
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-    setSaved(false);
+  async function handleFormSubmit(data: TransferFormInput) {
+    const parsedAmount = parseFormattedNumber(data.amount);
+    const parsedFee = parseFormattedNumber(data.feeAmount || "0");
 
-    const amountValue = parseFormattedNumber(amount);
-    const feeAmountValue = parseFormattedNumber(feeAmount);
-
-    if (!amountValue || amountValue < 1) {
-      setError("Amount should be at least 1 IDR.");
-      setSaving(false);
-      return;
-    }
-
-    if (!selectedFromChannelId || !selectedToChannelId) {
-      setError("Choose both wallets first.");
-      setSaving(false);
-      return;
-    }
-
-    if (selectedFromChannelId === selectedToChannelId) {
-      setError("Choose two different wallets.");
-      setSaving(false);
+    if (parsedAmount < 1) {
+      setError("amount", { message: "Amount should be at least 1 IDR." });
       return;
     }
 
     const nextError = await onSubmit({
-      amount: amountValue,
-      fromChannelId: selectedFromChannelId,
-      toChannelId: selectedToChannelId,
-      feeAmount: feeAmountValue || 0,
-      feeCategoryId: feeCategoryId || null,
-      note: note.trim() || null,
-      transferredAt,
+      amount: parsedAmount,
+      fromChannelId: data.fromChannelId,
+      toChannelId: data.toChannelId,
+      feeAmount: parsedFee || 0,
+      feeCategoryId: data.feeCategoryId || null,
+      note: data.note?.trim() || null,
+      transferredAt: data.transferredAt,
     });
 
-    setSaving(false);
-
     if (nextError) {
-      setError(nextError);
+      setError("root", { message: nextError });
       return;
     }
 
@@ -107,27 +116,28 @@ export function TransferForm({
 
   return (
     <Card>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
         <Field label="Transfer amount">
           <input
             required
             inputMode="numeric"
             type="text"
-            value={amount}
-            onChange={(event) => setAmount(formatNumberWithCommas(event.target.value))}
+            {...register("amount", {
+              onChange: (event) => {
+                setValue("amount", formatNumberWithCommas(event.target.value));
+              },
+            })}
             className={`${inputClassName} text-2xl font-black`}
             placeholder="500,000"
           />
+          {errors.amount ? (
+            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.amount.message}</p>
+          ) : null}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="From">
-            <select
-              required
-              value={selectedFromChannelId}
-              onChange={(event) => setFromChannelId(event.target.value)}
-              className={inputClassName}
-            >
+            <select {...register("fromChannelId")} className={inputClassName}>
               {channels.map((channel) => (
                 <option key={channel.id} value={channel.id}>
                   {channel.name}
@@ -137,18 +147,16 @@ export function TransferForm({
           </Field>
 
           <Field label="To">
-            <select
-              required
-              value={selectedToChannelId}
-              onChange={(event) => setToChannelId(event.target.value)}
-              className={inputClassName}
-            >
+            <select {...register("toChannelId")} className={inputClassName}>
               {channels.map((channel) => (
                 <option key={channel.id} value={channel.id}>
                   {channel.name}
                 </option>
               ))}
             </select>
+            {errors.toChannelId ? (
+              <p className="mt-1 text-sm font-bold text-primary-dark">{errors.toChannelId.message}</p>
+            ) : null}
           </Field>
         </div>
 
@@ -156,19 +164,18 @@ export function TransferForm({
           <input
             inputMode="numeric"
             type="text"
-            value={feeAmount}
-            onChange={(event) => setFeeAmount(formatNumberWithCommas(event.target.value))}
+            {...register("feeAmount", {
+              onChange: (event) => {
+                setValue("feeAmount", formatNumberWithCommas(event.target.value));
+              },
+            })}
             className={inputClassName}
             placeholder="Optional"
           />
         </Field>
 
         <Field label="Fee category">
-          <select
-            value={feeCategoryId}
-            onChange={(event) => setFeeCategoryId(event.target.value)}
-            className={inputClassName}
-          >
+          <select {...register("feeCategoryId")} className={inputClassName}>
             <option value="">Uncategorized fee</option>
             {expenseCategories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -180,8 +187,7 @@ export function TransferForm({
 
         <Field label="Note">
           <input
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
+            {...register("note")}
             className={inputClassName}
             placeholder="Optional transfer note"
           />
@@ -191,21 +197,25 @@ export function TransferForm({
           <input
             required
             type="date"
-            value={transferredAt}
-            onChange={(event) => setTransferredAt(event.target.value)}
+            {...register("transferredAt")}
             className={inputClassName}
           />
+          {errors.transferredAt ? (
+            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.transferredAt.message}</p>
+          ) : null}
         </Field>
 
-        {error ? <p className="text-sm font-bold text-primary-dark">{error}</p> : null}
+        {errors.root ? (
+          <p className="text-sm font-bold text-primary-dark">{errors.root.message}</p>
+        ) : null}
         {saved && successMessage ? (
           <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
             {successMessage}
           </p>
         ) : null}
 
-        <button disabled={saving} className={`${buttonClassName} w-full`}>
-          {saving ? "Saving..." : submitLabel}
+        <button disabled={isSubmitting} className={`${buttonClassName} w-full`}>
+          {isSubmitting ? "Saving..." : submitLabel}
         </button>
       </form>
     </Card>

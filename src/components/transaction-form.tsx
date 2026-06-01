@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import {
   Card,
   EmptyState,
@@ -12,7 +15,20 @@ import { TypeSelect } from "@/components/forms";
 import { formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
 import type { Category, Channel, Transaction, TransactionType } from "@/types/database";
 
-type TransactionFormValues = {
+const transactionSchema = z.object({
+  amount: z
+    .string()
+    .min(1, "Enter an amount.")
+    .refine((val) => parseFormattedNumber(val) >= 1, "Amount should be at least 1 IDR."),
+  type: z.enum(["expense", "income"]),
+  categoryId: z.string().min(1, "Choose a category."),
+  channelId: z.string().nullable(),
+  note: z.string().nullable(),
+  spentAt: z.string().min(1, "Pick a date."),
+});
+
+type TransactionFormInput = z.input<typeof transactionSchema>;
+type TransactionFormOutput = {
   amount: number;
   type: TransactionType;
   categoryId: string;
@@ -36,65 +52,66 @@ export function TransactionForm({
   defaultChannelId?: string | null;
   submitLabel: string;
   successMessage?: string;
-  onSubmit: (values: TransactionFormValues) => Promise<string | null>;
+  onSubmit: (values: TransactionFormOutput) => Promise<string | null>;
 }) {
-  const [amount, setAmount] = useState(
-    transaction ? formatNumberWithCommas(String(transaction.amount)) : ""
-  );
-  const [categoryId, setCategoryId] = useState(transaction?.category_id || "");
-  const [channelId, setChannelId] = useState(transaction?.channel_id || defaultChannelId || "");
-  const [note, setNote] = useState(transaction?.note || "");
-  const [spentAt, setSpentAt] = useState(transaction?.spent_at || todayDate());
-  const [type, setType] = useState<TransactionType>(transaction?.type || "expense");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    setError,
+    formState: { errors, isSubmitting },
+  } = useForm<TransactionFormInput>({
+    resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      amount: transaction ? formatNumberWithCommas(String(transaction.amount)) : "",
+      type: transaction?.type || "expense",
+      categoryId: transaction?.category_id || "",
+      channelId: transaction?.channel_id || defaultChannelId || null,
+      note: transaction?.note || null,
+      spentAt: transaction?.spent_at || todayDate(),
+    },
+  });
+
   const [saved, setSaved] = useState(false);
-
+  const type = watch("type");
+  const amountValue = watch("amount");
   const filteredCategories = categories.filter((category) => category.type === type);
-  const selectedCategoryId = categoryId || filteredCategories[0]?.id || "";
 
-  function updateType(nextType: TransactionType) {
-    setType(nextType);
+  function handleTypeChange(nextType: TransactionType) {
+    setValue("type", nextType);
     const nextCategory = categories.find((category) => category.type === nextType);
-    setCategoryId(nextCategory?.id || "");
+    setValue("categoryId", nextCategory?.id || "");
   }
 
   function setQuickAmount(value: number) {
-    setAmount(formatNumberWithCommas(String(value)));
+    setValue("amount", formatNumberWithCommas(String(value)));
   }
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-
-    const amountValue = parseFormattedNumber(amount);
-
-    if (!amountValue || amountValue < 1) {
-      setError("Amount should be at least 1 IDR.");
-      setSaving(false);
+  async function handleFormSubmit(data: TransactionFormInput) {
+    const parsedAmount = parseFormattedNumber(data.amount);
+    if (parsedAmount < 1) {
+      setError("amount", { message: "Amount should be at least 1 IDR." });
       return;
     }
 
-    if (!selectedCategoryId) {
-      setError("Choose a category first.");
-      setSaving(false);
+    if (!data.categoryId) {
+      setError("categoryId", { message: "Choose a category." });
       return;
     }
 
     const nextError = await onSubmit({
-      amount: amountValue,
-      type,
-      categoryId: selectedCategoryId,
-      channelId: channelId || null,
-      note: note.trim() || null,
-      spentAt,
+      amount: parsedAmount,
+      type: data.type,
+      categoryId: data.categoryId,
+      channelId: data.channelId || null,
+      note: data.note?.trim() || null,
+      spentAt: data.spentAt,
     });
 
-    setSaving(false);
-
     if (nextError) {
-      setError(nextError);
+      setError("root", { message: nextError });
       return;
     }
 
@@ -105,25 +122,32 @@ export function TransactionForm({
     return (
       <EmptyState
         title="Add categories first"
-        body="Create a few jars like Coffee, Groceries, or Transport before adding spending."
+        body="Create a few jars like Groceries, Transport, or Bills before adding spending."
       />
     );
   }
 
   return (
     <Card>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
         <Field label="How much?">
           <div className="space-y-3">
             <input
               required
               inputMode="numeric"
               type="text"
-              value={amount}
-              onChange={(event) => setAmount(formatNumberWithCommas(event.target.value))}
+              {...register("amount", {
+                onChange: (event) => {
+                  const formatted = formatNumberWithCommas(event.target.value);
+                  setValue("amount", formatted);
+                },
+              })}
               className={`${inputClassName} text-2xl font-black`}
               placeholder="50,000"
             />
+            {errors.amount ? (
+              <p className="text-sm font-bold text-primary-dark">{errors.amount.message}</p>
+            ) : null}
             <div className="grid grid-cols-4 gap-2">
               {[10000, 25000, 50000, 100000].map((value) => (
                 <button
@@ -140,14 +164,18 @@ export function TransactionForm({
         </Field>
 
         <Field label="Kind of bloom">
-          <TypeSelect value={type} onChange={updateType} />
+          <Controller
+            control={control}
+            name="type"
+            render={() => (
+              <TypeSelect value={type} onChange={handleTypeChange} />
+            )}
+          />
         </Field>
 
         <Field label="Little jar">
           <select
-            required
-            value={selectedCategoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
+            {...register("categoryId")}
             className={inputClassName}
           >
             {filteredCategories.map((category) => (
@@ -156,12 +184,14 @@ export function TransactionForm({
               </option>
             ))}
           </select>
+          {errors.categoryId ? (
+            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.categoryId.message}</p>
+          ) : null}
         </Field>
 
         <Field label="Paid from">
           <select
-            value={channelId}
-            onChange={(event) => setChannelId(event.target.value)}
+            {...register("channelId")}
             className={inputClassName}
           >
             <option value="">No channel</option>
@@ -175,8 +205,7 @@ export function TransactionForm({
 
         <Field label="Tiny note">
           <input
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
+            {...register("note")}
             className={inputClassName}
             placeholder="Optional sweet little memory"
           />
@@ -186,21 +215,25 @@ export function TransactionForm({
           <input
             required
             type="date"
-            value={spentAt}
-            onChange={(event) => setSpentAt(event.target.value)}
+            {...register("spentAt")}
             className={inputClassName}
           />
+          {errors.spentAt ? (
+            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.spentAt.message}</p>
+          ) : null}
         </Field>
 
-        {error ? <p className="text-sm font-bold text-primary-dark">{error}</p> : null}
+        {errors.root ? (
+          <p className="text-sm font-bold text-primary-dark">{errors.root.message}</p>
+        ) : null}
         {saved && successMessage ? (
           <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
             {successMessage}
           </p>
         ) : null}
 
-        <button disabled={saving} className={`${buttonClassName} w-full`}>
-          {saving ? "Saving..." : submitLabel}
+        <button disabled={isSubmitting} className={`${buttonClassName} w-full`}>
+          {isSubmitting ? "Saving..." : submitLabel}
         </button>
       </form>
     </Card>

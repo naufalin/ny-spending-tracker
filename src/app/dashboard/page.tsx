@@ -229,13 +229,6 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const todayTotal = expenses
     .filter((transaction) => transaction.spent_at === todayDate())
     .reduce((sum, transaction) => sum + transaction.amount, 0);
-  const coffeeTotal = expenses
-    .filter((transaction) => {
-      const name = transaction.categories?.name.toLowerCase() || "";
-      return name.includes("coffee") || name.includes("kopi");
-    })
-    .reduce((sum, transaction) => sum + transaction.amount, 0);
-
   const categoryTotals = expenses.reduce<Record<string, CategoryTotal>>((acc, transaction) => {
     const name = transaction.categories?.name || "Uncategorized";
     acc[name] = acc[name] || { id: transaction.category_id || undefined, name, amount: 0 };
@@ -486,26 +479,15 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           </div>
         </Card>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Card className="bg-[linear-gradient(160deg,#FFFFFF,#F6D6DE)]">
-            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-card text-xl">
-              ☀️
-            </div>
-            <p className="text-sm font-black text-muted">Today’s petals</p>
-            <p className="mt-2 text-2xl font-black text-foreground">
-              {loading ? "..." : formatDashboardMoney(todayTotal)}
-            </p>
-          </Card>
-          <Card className="bg-[linear-gradient(160deg,#FFFFFF,#EEF6EA)]">
-            <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-card text-xl">
-              ☕
-            </div>
-            <p className="text-sm font-black text-muted">Coffee treats</p>
-            <p className="mt-2 text-2xl font-black text-foreground">
-              {loading ? "..." : formatDashboardMoney(coffeeTotal)}
-            </p>
-          </Card>
-        </div>
+        <Card className="bg-[linear-gradient(160deg,#FFFFFF,#F6D6DE)]">
+          <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-card text-xl">
+            ☀️
+          </div>
+          <p className="text-sm font-black text-muted">Today's petals</p>
+          <p className="mt-2 text-2xl font-black text-foreground">
+            {loading ? "..." : formatDashboardMoney(todayTotal)}
+          </p>
+        </Card>
 
         <Card className="bg-[linear-gradient(160deg,#FFFFFF,#EEF6EA)]">
           <div className="mb-4 flex items-center gap-2">

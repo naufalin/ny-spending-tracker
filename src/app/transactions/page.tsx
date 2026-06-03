@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, Field, PageHeader, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
+import { Card, EmptyState, Field, Modal, PageHeader, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
+import { TransactionForm } from "@/components/transaction-form";
 import { formatDate, formatIdr, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { GoogleSheetsSyncButton } from "@/components/google-sheets-sync-button";
@@ -17,7 +18,6 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [openActionsId, setOpenActionsId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [month, setMonth] = useState(monthStart().slice(0, 7));
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
@@ -25,6 +25,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -360,41 +361,84 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   {formatIdr(transaction.amount)}
                 </p>
               </div>
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    setOpenActionsId((current) =>
-                      current === transaction.id ? null : transaction.id
-                    )
-                  }
-                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark disabled:opacity-60"
+                  onClick={() => setEditingTransaction(transaction)}
+                  className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark transition hover:bg-primary-dark hover:text-white"
                 >
-                  More
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => deleteTransaction(transaction.id)}
+                  disabled={deletingId === transaction.id}
+                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark disabled:opacity-60"
+                >
+                  {deletingId === transaction.id ? "Deleting..." : "Delete"}
                 </button>
               </div>
-              {openActionsId === transaction.id ? (
-                <div className="mt-3 grid grid-cols-2 gap-2 rounded-2xl bg-background p-2">
-                  <Link
-                    href={`/transactions/${transaction.id}/edit`}
-                    className="rounded-xl bg-card px-4 py-3 text-center text-sm font-black text-foreground"
-                  >
-                    Edit
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => deleteTransaction(transaction.id)}
-                    disabled={deletingId === transaction.id}
-                    className="rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark disabled:opacity-60"
-                  >
-                    {deletingId === transaction.id ? "Deleting..." : "Delete"}
-                  </button>
-                </div>
-              ) : null}
             </Card>
           ))}
         </div>
       )}
+      <Modal
+        open={editingTransaction !== null}
+        onClose={() => setEditingTransaction(null)}
+        title="Edit transaction"
+      >
+        {editingTransaction ? (
+          <TransactionForm
+            categories={categories}
+            subcategories={subcategories}
+            channels={channels}
+            transaction={editingTransaction}
+            submitLabel="Save changes 🌿"
+            successMessage="Updated!"
+            onSuccess={() => setTimeout(() => setEditingTransaction(null), 800)}
+            onSubmit={async (values) => {
+              const { error } = await supabase
+                .from("transactions")
+                .update({
+                  category_id: values.categoryId,
+                  subcategory_id: values.subcategoryId,
+                  channel_id: values.channelId,
+                  amount: values.amount,
+                  type: values.type,
+                  note: values.note,
+                  spent_at: values.spentAt,
+                })
+                .eq("id", editingTransaction.id)
+                .eq("household_id", householdId);
+
+              if (error) {
+                return error.message;
+              }
+
+              setTransactions((current) =>
+                current.map((txn) =>
+                  txn.id === editingTransaction.id
+                    ? {
+                        ...txn,
+                        category_id: values.categoryId,
+                        subcategory_id: values.subcategoryId,
+                        channel_id: values.channelId,
+                        amount: values.amount,
+                        type: values.type,
+                        note: values.note,
+                        spent_at: values.spentAt,
+                        categories: categories.find((c) => c.id === values.categoryId) || null,
+                        subcategories: subcategories.find((s) => s.id === values.subcategoryId) || null,
+                        channels: channels.find((c) => c.id === values.channelId) || null,
+                      }
+                    : txn
+                )
+              );
+              return null;
+            }}
+          />
+        ) : null}
+      </Modal>
     </>
   );
 }

@@ -48,6 +48,7 @@ export function TransactionForm({
   defaultChannelId,
   submitLabel,
   successMessage,
+  onSuccess,
   onSubmit,
 }: {
   categories: Category[];
@@ -57,6 +58,7 @@ export function TransactionForm({
   defaultChannelId?: string | null;
   submitLabel: string;
   successMessage?: string;
+  onSuccess?: () => void;
   onSubmit: (values: TransactionFormOutput) => Promise<string | null>;
 }) {
   const {
@@ -126,6 +128,7 @@ export function TransactionForm({
     }
 
     setSaved(true);
+    onSuccess?.();
   }
 
   if (categories.length === 0) {

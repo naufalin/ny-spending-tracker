@@ -26,6 +26,13 @@ export type Category = {
   type: TransactionType;
 };
 
+export type Subcategory = {
+  id: string;
+  household_id: string;
+  category_id: string;
+  name: string;
+};
+
 export type Channel = {
   id: string;
   household_id: string;
@@ -37,6 +44,7 @@ export type Transaction = {
   household_id: string;
   user_id: string | null;
   category_id: string | null;
+  subcategory_id: string | null;
   channel_id: string | null;
   amount: number;
   type: TransactionType;
@@ -44,6 +52,7 @@ export type Transaction = {
   spent_at: string;
   created_at: string | null;
   categories?: Pick<Category, "id" | "name" | "type"> | null;
+  subcategories?: Pick<Subcategory, "id" | "name"> | null;
   channels?: Pick<Channel, "id" | "name"> | null;
 };
 
@@ -115,6 +124,11 @@ export type Database = {
         Insert: Omit<Category, "id"> & { id?: string };
         Update: Partial<Category>;
       };
+      subcategories: {
+        Row: Subcategory;
+        Insert: Omit<Subcategory, "id"> & { id?: string };
+        Update: Partial<Subcategory>;
+      };
       channels: {
         Row: Channel;
         Insert: Omit<Channel, "id"> & { id?: string };
@@ -122,11 +136,11 @@ export type Database = {
       };
       transactions: {
         Row: Transaction;
-        Insert: Omit<Transaction, "id" | "created_at" | "categories" | "channels"> & {
+        Insert: Omit<Transaction, "id" | "created_at" | "categories" | "subcategories" | "channels"> & {
           id?: string;
           created_at?: string | null;
         };
-        Update: Partial<Omit<Transaction, "categories" | "channels">>;
+        Update: Partial<Omit<Transaction, "categories" | "subcategories" | "channels">>;
       };
       transfers: {
         Row: Transfer;

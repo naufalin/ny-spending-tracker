@@ -13,6 +13,7 @@ type SyncSummary = {
   Transfers: number;
   Budgets: number;
   Categories: number;
+  Subcategories: number;
   Channels: number;
 };
 
@@ -187,7 +188,7 @@ async function ensureManagedTabs(accessToken: string, spreadsheetId: string) {
     await googleRequest(accessToken, `/${spreadsheetId}?fields=sheets.properties`)
   ).json()) as { sheets?: Array<{ properties: { title: string; sheetId: number } }> };
   const existing = new Map((metadata.sheets || []).map((sheet) => [sheet.properties.title, sheet.properties.sheetId]));
-  const managedTabs = ["Transactions", "Transfers", "Budgets", "Categories", "Channels"];
+  const managedTabs = ["Transactions", "Transfers", "Budgets", "Categories", "Subcategories", "Channels"];
   const missing = managedTabs.filter((title) => !existing.has(title));
 
   if (missing.length) {
@@ -237,10 +238,10 @@ export async function syncHouseholdToGoogleSheets(
     decryptRefreshToken(connection.encrypted_refresh_token)
   );
   const householdId = connection.household_id;
-  const [transactions, transfers, budgets, categories, channels] = await Promise.all([
+  const [transactions, transfers, budgets, categories, channels, subcategories] = await Promise.all([
     supabase
       .from("transactions")
-      .select("*, categories(id, name, type), channels(id, name)")
+      .select("*, categories(id, name, type), subcategories(id, name), channels(id, name)")
       .eq("household_id", householdId)
       .order("spent_at")
       .order("created_at"),
@@ -257,14 +258,14 @@ export async function syncHouseholdToGoogleSheets(
       .order("month"),
     supabase.from("categories").select("*").eq("household_id", householdId).order("name"),
     supabase.from("channels").select("*").eq("household_id", householdId).order("name"),
+    supabase.from("subcategories").select("*, categories(name)").eq("household_id", householdId).order("name"),
   ]);
 
-  for (const result of [transactions, transfers, budgets, categories, channels]) {
+  for (const result of [transactions, transfers, budgets, categories, channels, subcategories]) {
     if (result.error) {
       throw result.error;
     }
   }
-
   const userIds = Array.from(
     new Set(
       [...(transactions.data || []), ...(transfers.data || [])]
@@ -278,12 +279,13 @@ export async function syncHouseholdToGoogleSheets(
   const profileMap = new Map((profiles || []).map((profile) => [profile.id, profile.display_name]));
 
   const transactionRows = [
-    ["Date", "Type", "Amount", "Category", "Channel", "Note", "Added by", "Created at", "Record ID"],
+    ["Date", "Type", "Amount", "Category", "Sub-category", "Channel", "Note", "Added by", "Created at", "Record ID"],
     ...(transactions.data || []).map((row) => [
       row.spent_at,
       row.type,
       row.amount,
       row.categories?.name || "",
+      row.subcategories?.name || "",
       row.channels?.name || "",
       row.note || "",
       creatorLabel(row.user_id, profileMap),
@@ -324,6 +326,10 @@ export async function syncHouseholdToGoogleSheets(
     ["Name", "Record ID"],
     ...(channels.data || []).map((row) => [row.name, row.id]),
   ];
+  const subcategoryRows = [
+    ["Name", "Category", "Record ID"],
+    ...(subcategories.data || []).map((row) => [row.name, row.categories?.name || "", row.id]),
+  ];
 
   await ensureManagedTabs(accessToken, connection.spreadsheet_id);
   await Promise.all([
@@ -331,6 +337,7 @@ export async function syncHouseholdToGoogleSheets(
     replaceSheetValues(accessToken, connection.spreadsheet_id, "Transfers", transferRows),
     replaceSheetValues(accessToken, connection.spreadsheet_id, "Budgets", budgetRows),
     replaceSheetValues(accessToken, connection.spreadsheet_id, "Categories", categoryRows),
+    replaceSheetValues(accessToken, connection.spreadsheet_id, "Subcategories", subcategoryRows),
     replaceSheetValues(accessToken, connection.spreadsheet_id, "Channels", channelRows),
   ]);
 
@@ -339,6 +346,7 @@ export async function syncHouseholdToGoogleSheets(
     Transfers: transferRows.length - 1,
     Budgets: budgetRows.length - 1,
     Categories: categoryRows.length - 1,
+    Subcategories: subcategoryRows.length - 1,
     Channels: channelRows.length - 1,
   };
 

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader, ProtectedPage } from "@/components/app-shell";
 import { TransactionForm } from "@/components/transaction-form";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Category, Channel, Profile } from "@/types/database";
+import type { Category, Channel, Profile, Subcategory } from "@/types/database";
 
 function NewTransactionContent({
   householdId,
@@ -17,6 +17,7 @@ function NewTransactionContent({
   const router = useRouter();
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [defaultChannelId, setDefaultChannelId] = useState<string | null>(null);
 
@@ -24,9 +25,14 @@ function NewTransactionContent({
     let isMounted = true;
 
     async function loadOptions() {
-      const [categoryResult, channelResult, profileResult] = await Promise.all([
+      const [categoryResult, subcategoryResult, channelResult, profileResult] = await Promise.all([
         supabase
           .from("categories")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+        supabase
+          .from("subcategories")
           .select("*")
           .eq("household_id", householdId)
           .order("name"),
@@ -40,6 +46,7 @@ function NewTransactionContent({
 
       if (isMounted) {
         setCategories((categoryResult.data || []) as Category[]);
+        setSubcategories((subcategoryResult.data || []) as Subcategory[]);
         setChannels((channelResult.data || []) as Channel[]);
         setDefaultChannelId(((profileResult.data as Profile | null)?.default_channel_id) || null);
       }
@@ -54,9 +61,10 @@ function NewTransactionContent({
 
   return (
     <>
-      <PageHeader eyebrow="Add today’s spending 🌸" title="New transaction" />
+      <PageHeader eyebrow="Add today's spending 🌸" title="New transaction" />
       <TransactionForm
         categories={categories}
+        subcategories={subcategories}
         channels={channels}
         defaultChannelId={defaultChannelId}
         submitLabel="Save spending 🌸"
@@ -66,6 +74,7 @@ function NewTransactionContent({
             household_id: householdId,
             user_id: userId,
             category_id: values.categoryId,
+            subcategory_id: values.subcategoryId,
             channel_id: values.channelId,
             amount: values.amount,
             type: values.type,

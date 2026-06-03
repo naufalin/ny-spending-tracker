@@ -6,13 +6,14 @@ import { Card, EmptyState, Field, PageHeader, ProtectedPage, buttonClassName, in
 import { formatDate, formatIdr, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { GoogleSheetsSyncButton } from "@/components/google-sheets-sync-button";
-import type { Category, Channel, Profile, Transaction, TransactionType } from "@/types/database";
+import type { Category, Channel, Profile, Subcategory, Transaction, TransactionType } from "@/types/database";
 
 function TransactionsContent({ householdId, userId }: { householdId: string; userId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -21,6 +22,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [month, setMonth] = useState(monthStart().slice(0, 7));
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("all");
   const [channelFilter, setChannelFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
 
@@ -28,10 +30,10 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     let isMounted = true;
 
     async function loadTransactions() {
-      const [transactionResult, categoryResult, channelResult] = await Promise.all([
+      const [transactionResult, categoryResult, channelResult, subcategoryResult] = await Promise.all([
         supabase
           .from("transactions")
-          .select("*, categories(id, name, type), channels(id, name)")
+          .select("*, categories(id, name, type), subcategories(id, name), channels(id, name)")
           .eq("household_id", householdId)
           .order("spent_at", { ascending: false })
           .order("created_at", { ascending: false })
@@ -43,6 +45,11 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
           .order("name"),
         supabase
           .from("channels")
+          .select("*")
+          .eq("household_id", householdId)
+          .order("name"),
+        supabase
+          .from("subcategories")
           .select("*")
           .eq("household_id", householdId)
           .order("name"),
@@ -65,6 +72,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         setTransactions(nextTransactions);
         setCategories((categoryResult.data || []) as Category[]);
         setChannels((channelResult.data || []) as Channel[]);
+        setSubcategories((subcategoryResult.data || []) as Subcategory[]);
         setProfiles(
           ((profileData || []) as Profile[]).reduce<Record<string, Profile>>((acc, profile) => {
             acc[profile.id] = profile;
@@ -92,6 +100,10 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     }
 
     if (categoryFilter !== "all" && transaction.category_id !== categoryFilter) {
+      return false;
+    }
+
+    if (subcategoryFilter !== "all" && transaction.subcategory_id !== subcategoryFilter) {
       return false;
     }
 
@@ -215,7 +227,10 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
               <Field label="Category">
                 <select
                   value={categoryFilter}
-                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  onChange={(event) => {
+                    setCategoryFilter(event.target.value);
+                    setSubcategoryFilter("all");
+                  }}
                   className={inputClassName}
                 >
                   <option value="all">All</option>
@@ -226,6 +241,30 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   ))}
                 </select>
               </Field>
+              {(() => {
+                const filteredSubs = categoryFilter === "all"
+                  ? subcategories
+                  : subcategories.filter((sub) => sub.category_id === categoryFilter);
+
+                if (filteredSubs.length === 0) return null;
+
+                return (
+                  <Field label="Sub-category">
+                    <select
+                      value={subcategoryFilter}
+                      onChange={(event) => setSubcategoryFilter(event.target.value)}
+                      className={inputClassName}
+                    >
+                      <option value="all">All</option>
+                      {filteredSubs.map((sub) => (
+                        <option key={sub.id} value={sub.id}>
+                          {sub.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                );
+              })()}
               <Field label="Channel">
                 <select
                   value={channelFilter}
@@ -261,6 +300,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                     setMonth("");
                     setTypeFilter("all");
                     setCategoryFilter("all");
+                    setSubcategoryFilter("all");
                     setChannelFilter("all");
                     setPersonFilter("all");
                   }}
@@ -290,6 +330,11 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                     <span className="rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
                       {transaction.categories?.name || "Uncategorized"}
                     </span>
+                    {transaction.subcategories?.name ? (
+                      <span className="rounded-full bg-accent/60 px-3 py-1 text-xs font-black text-primary-dark">
+                        {transaction.subcategories.name}
+                      </span>
+                    ) : null}
                     <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
                       {transaction.channels?.name || "No channel"}
                     </span>

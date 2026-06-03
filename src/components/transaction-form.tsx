@@ -14,6 +14,7 @@ import {
 import { TypeSelect } from "@/components/forms";
 import { formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
 import type { Category, Channel, Transaction, TransactionType } from "@/types/database";
+import type { Subcategory } from "@/types/database";
 
 const transactionSchema = z.object({
   amount: z
@@ -22,6 +23,7 @@ const transactionSchema = z.object({
     .refine((val) => parseFormattedNumber(val) >= 1, "Amount should be at least 1 IDR."),
   type: z.enum(["expense", "income"]),
   categoryId: z.string().min(1, "Choose a category."),
+  subcategoryId: z.string().nullable(),
   channelId: z.string().nullable(),
   note: z.string().nullable(),
   spentAt: z.string().min(1, "Pick a date."),
@@ -32,6 +34,7 @@ type TransactionFormOutput = {
   amount: number;
   type: TransactionType;
   categoryId: string;
+  subcategoryId: string | null;
   channelId: string | null;
   note: string | null;
   spentAt: string;
@@ -39,6 +42,7 @@ type TransactionFormOutput = {
 
 export function TransactionForm({
   categories,
+  subcategories,
   channels,
   transaction,
   defaultChannelId,
@@ -47,6 +51,7 @@ export function TransactionForm({
   onSubmit,
 }: {
   categories: Category[];
+  subcategories: Subcategory[];
   channels: Channel[];
   transaction?: Transaction;
   defaultChannelId?: string | null;
@@ -68,6 +73,7 @@ export function TransactionForm({
       amount: transaction ? formatNumberWithCommas(String(transaction.amount)) : "",
       type: transaction?.type || "expense",
       categoryId: transaction?.category_id || "",
+      subcategoryId: transaction?.subcategory_id || null,
       channelId: transaction?.channel_id || defaultChannelId || null,
       note: transaction?.note || null,
       spentAt: transaction?.spent_at || todayDate(),
@@ -78,11 +84,14 @@ export function TransactionForm({
   const type = watch("type");
   const amountValue = watch("amount");
   const filteredCategories = categories.filter((category) => category.type === type);
+  const categoryId = watch("categoryId");
+  const filteredSubcategories = subcategories.filter((sub) => sub.category_id === categoryId);
 
   function handleTypeChange(nextType: TransactionType) {
     setValue("type", nextType);
     const nextCategory = categories.find((category) => category.type === nextType);
     setValue("categoryId", nextCategory?.id || "");
+    setValue("subcategoryId", null);
   }
 
   function setQuickAmount(value: number) {
@@ -105,6 +114,7 @@ export function TransactionForm({
       amount: parsedAmount,
       type: data.type,
       categoryId: data.categoryId,
+      subcategoryId: data.subcategoryId || null,
       channelId: data.channelId || null,
       note: data.note?.trim() || null,
       spentAt: data.spentAt,
@@ -175,7 +185,9 @@ export function TransactionForm({
 
         <Field label="Little jar">
           <select
-            {...register("categoryId")}
+            {...register("categoryId", {
+              onChange: () => setValue("subcategoryId", null),
+            })}
             className={inputClassName}
           >
             {filteredCategories.map((category) => (
@@ -188,6 +200,22 @@ export function TransactionForm({
             <p className="mt-1 text-sm font-bold text-primary-dark">{errors.categoryId.message}</p>
           ) : null}
         </Field>
+
+        {filteredSubcategories.length > 0 ? (
+          <Field label="Little petal">
+            <select
+              {...register("subcategoryId")}
+              className={inputClassName}
+            >
+              <option value="">No sub-category</option>
+              {filteredSubcategories.map((sub) => (
+                <option key={sub.id} value={sub.id}>
+                  {sub.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
 
         <Field label="Paid from">
           <select

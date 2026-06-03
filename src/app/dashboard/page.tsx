@@ -13,9 +13,16 @@ import {
 import { classNames, formatDate, formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Budget, Category, Channel, Transaction, Transfer } from "@/types/database";
+import type { Subcategory } from "@/types/database";
 
 type CategoryTotal = {
   id?: string;
+  name: string;
+  amount: number;
+};
+
+type SubcategoryTotal = {
+  id: string;
   name: string;
   amount: number;
 };
@@ -125,6 +132,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [seedMessage, setSeedMessage] = useState("");
@@ -160,10 +168,11 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         budgetResult,
         categoryResult,
         channelResult,
+        subcategoryResult,
       ] = await Promise.all([
         supabase
           .from("transactions")
-          .select("*, categories(id, name, type), channels(id, name)")
+          .select("*, categories(id, name, type), subcategories(id, name), channels(id, name)")
           .eq("household_id", householdId)
           .gte("spent_at", monthStart())
           .lt("spent_at", nextMonthStart())
@@ -183,6 +192,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           .eq("month", monthStart()),
         supabase.from("categories").select("*").eq("household_id", householdId),
         supabase.from("channels").select("*").eq("household_id", householdId).order("name"),
+        supabase.from("subcategories").select("*").eq("household_id", householdId),
       ]);
 
       if (isMounted) {
@@ -192,6 +202,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         setBudgets((budgetResult.data || []) as Budget[]);
         setCategories((categoryResult.data || []) as Category[]);
         setChannels((channelResult.data || []) as Channel[]);
+        setSubcategories((subcategoryResult.data || []) as Subcategory[]);
         setLoading(false);
       }
     }
@@ -225,7 +236,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
     supabase
       .from("transactions")
-      .select("*, categories(id, name, type)")
+      .select("*, categories(id, name, type), subcategories(id, name)")
       .eq("household_id", householdId)
       .eq("type", "expense")
       .gte("spent_at", start)
@@ -634,24 +645,92 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                         </svg>
                       </button>
                       {isSelected ? (
-                        <div className="ml-5 space-y-1 border-l-2 border-border pl-3 pb-2">
-                          {jarTxns.length === 0 ? (
-                            <p className="py-2 text-xs text-muted">No transactions.</p>
-                          ) : (
-                            jarTxns.map((txn) => (
-                              <div key={txn.id} className="flex items-center justify-between gap-2 py-1.5">
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm text-foreground">
-                                    {txn.note || txn.channels?.name || "—"}
-                                  </p>
-                                  <p className="text-xs text-muted">{formatDate(txn.spent_at)}</p>
-                                </div>
-                                <span className="shrink-0 text-sm font-black text-primary-dark">
-                                  -{formatIdr(txn.amount)}
-                                </span>
-                              </div>
-                            ))
-                          )}
+                        <div className="ml-5 space-y-2 border-l-2 border-border pl-3 pb-2">
+                          {(() => {
+                            const jarSubs = subcategories.filter((s) => s.category_id === category.id);
+                            const txnsNoSub = jarTxns.filter((t) => !t.subcategory_id);
+                            const subTotals = jarSubs
+                              .map((sub) => {
+                                const total = jarTxns
+                                  .filter((t) => t.subcategory_id === sub.id)
+                                  .reduce((sum, t) => sum + t.amount, 0);
+                                return { ...sub, amount: total };
+                              })
+                              .filter((s) => s.amount > 0)
+                              .sort((a, b) => b.amount - a.amount);
+
+                            if (jarTxns.length === 0) {
+                              return <p className="py-2 text-xs text-muted">No transactions.</p>;
+                            }
+
+                            return (
+                              <>
+                                {subTotals.map((sub) => {
+                                  const subTxns = jarTxns.filter((t) => t.subcategory_id === sub.id);
+                                  const percent = jarTotal > 0 ? (sub.amount / category.amount) * 100 : 0;
+                                  return (
+                                    <div key={sub.id}>
+                                      <div className="flex items-center justify-between gap-2 py-1">
+                                        <span className="text-xs font-black text-foreground">{sub.name}</span>
+                                        <span className="text-xs font-black text-primary-dark">
+                                          {formatDashboardMoney(sub.amount)}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-background">
+                                          <div
+                                            className="h-full rounded-full"
+                                            style={{
+                                              width: `${Math.min(100, percent)}%`,
+                                              minWidth: percent > 0 ? "2px" : undefined,
+                                              backgroundColor: category.color,
+                                              opacity: 0.7,
+                                            }}
+                                          />
+                                        </div>
+                                        <span className="w-8 text-right text-[10px] font-bold text-muted">
+                                          {formatCategoryPercent(percent)}
+                                        </span>
+                                      </div>
+                                      {subTxns.map((txn) => (
+                                        <div key={txn.id} className="flex items-center justify-between gap-2 py-1 pl-2">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="truncate text-xs text-foreground">
+                                              {txn.note || txn.channels?.name || "—"}
+                                            </p>
+                                            <p className="text-[10px] text-muted">{formatDate(txn.spent_at)}</p>
+                                          </div>
+                                          <span className="shrink-0 text-xs font-black text-primary-dark">
+                                            -{formatIdr(txn.amount)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  );
+                                })}
+                                {txnsNoSub.length > 0 ? (
+                                  <div>
+                                    {subTotals.length > 0 ? (
+                                      <p className="mb-1 text-[10px] font-bold text-muted">Other</p>
+                                    ) : null}
+                                    {txnsNoSub.map((txn) => (
+                                      <div key={txn.id} className="flex items-center justify-between gap-2 py-1.5">
+                                        <div className="min-w-0 flex-1">
+                                          <p className="truncate text-sm text-foreground">
+                                            {txn.note || txn.channels?.name || "—"}
+                                          </p>
+                                          <p className="text-xs text-muted">{formatDate(txn.spent_at)}</p>
+                                        </div>
+                                        <span className="shrink-0 text-sm font-black text-primary-dark">
+                                          -{formatIdr(txn.amount)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </>
+                            );
+                          })()}
                         </div>
                       ) : null}
                     </div>

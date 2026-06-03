@@ -26,6 +26,13 @@ create table if not exists public.categories (
   type text not null check (type in ('expense', 'income'))
 );
 
+create table if not exists public.subcategories (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid references public.households(id) on delete cascade,
+  category_id uuid not null references public.categories(id) on delete cascade,
+  name text not null
+);
+
 create table if not exists public.channels (
   id uuid primary key default gen_random_uuid(),
   household_id uuid references public.households(id) on delete cascade,
@@ -40,6 +47,7 @@ create table if not exists public.transactions (
   household_id uuid references public.households(id) on delete cascade,
   user_id uuid references auth.users(id),
   category_id uuid references public.categories(id) on delete set null,
+  subcategory_id uuid references public.subcategories(id) on delete set null,
   channel_id uuid references public.channels(id),
   amount integer not null,
   type text not null check (type in ('expense', 'income')),
@@ -104,6 +112,7 @@ alter table public.households enable row level security;
 alter table public.household_members enable row level security;
 alter table public.profiles enable row level security;
 alter table public.categories enable row level security;
+alter table public.subcategories enable row level security;
 alter table public.channels enable row level security;
 alter table public.transactions enable row level security;
 alter table public.transfers enable row level security;
@@ -119,6 +128,10 @@ drop policy if exists "Members can view categories" on public.categories;
 drop policy if exists "Members can create categories" on public.categories;
 drop policy if exists "Members can update categories" on public.categories;
 drop policy if exists "Members can delete categories" on public.categories;
+drop policy if exists "Members can view subcategories" on public.subcategories;
+drop policy if exists "Members can create subcategories" on public.subcategories;
+drop policy if exists "Members can update subcategories" on public.subcategories;
+drop policy if exists "Members can delete subcategories" on public.subcategories;
 drop policy if exists "Members can view channels" on public.channels;
 drop policy if exists "Members can create channels" on public.channels;
 drop policy if exists "Members can update channels" on public.channels;
@@ -243,6 +256,62 @@ create policy "Members can delete categories"
       select 1
       from public.household_members
       where household_members.household_id = categories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can view subcategories"
+  on public.subcategories
+  for select
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = subcategories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can create subcategories"
+  on public.subcategories
+  for insert
+  with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = subcategories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can update subcategories"
+  on public.subcategories
+  for update
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = subcategories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = subcategories.household_id
+        and household_members.user_id = auth.uid()
+    )
+  );
+
+create policy "Members can delete subcategories"
+  on public.subcategories
+  for delete
+  using (
+    exists (
+      select 1
+      from public.household_members
+      where household_members.household_id = subcategories.household_id
         and household_members.user_id = auth.uid()
     )
   );

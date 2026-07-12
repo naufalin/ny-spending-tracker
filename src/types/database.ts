@@ -74,6 +74,16 @@ export type Transfer = {
   fee_category?: Pick<Category, "id" | "name" | "type"> | null;
 };
 
+export type TransferInput = {
+  amount: number;
+  fromChannelId: string;
+  toChannelId: string;
+  feeAmount: number;
+  feeCategoryId: string | null;
+  note: string | null;
+  transferredAt: string;
+};
+
 export type Budget = {
   id: string;
   household_id: string;

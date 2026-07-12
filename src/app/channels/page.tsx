@@ -222,9 +222,14 @@ function ChannelsContent({ householdId }: { householdId: string }) {
           <Card>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-black text-foreground">Recent transfers</h2>
-              <Link href="/transfers/new" className="text-sm font-black text-primary-dark">
-                New
-              </Link>
+              <div className="flex items-center gap-3">
+                <Link href="/transfers" className="text-sm font-black text-primary-dark">
+                  View all
+                </Link>
+                <Link href="/transfers/new" className="text-sm font-black text-primary-dark">
+                  New
+                </Link>
+              </div>
             </div>
             <div className="space-y-3">
               {transfers.map((transfer) => (

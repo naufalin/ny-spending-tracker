@@ -185,6 +185,12 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
             <GoogleSheetsSyncButton householdId={householdId} />
             <div className="flex gap-2">
             <Link
+              href="/transfers"
+              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+            >
+              Transfer history
+            </Link>
+            <Link
               href="/transfers/new"
               className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
             >

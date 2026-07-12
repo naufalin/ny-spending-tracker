@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,7 +12,7 @@ import {
   inputClassName,
 } from "@/components/app-shell";
 import { formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
-import type { Category, Channel } from "@/types/database";
+import type { Category, Channel, Transfer, TransferInput } from "@/types/database";
 
 const transferSchema = z
   .object({
@@ -33,50 +33,53 @@ const transferSchema = z
   });
 
 type TransferFormInput = z.input<typeof transferSchema>;
-type TransferFormOutput = {
-  amount: number;
-  fromChannelId: string;
-  toChannelId: string;
-  feeAmount: number;
-  feeCategoryId: string | null;
-  note: string | null;
-  transferredAt: string;
-};
-
 export function TransferForm({
   categories,
   channels,
+  transfer,
   submitLabel,
   successMessage,
+  onSuccess,
   onSubmit,
 }: {
   categories: Category[];
   channels: Channel[];
+  transfer?: Transfer;
   submitLabel: string;
   successMessage?: string;
-  onSubmit: (values: TransferFormOutput) => Promise<string | null>;
+  onSuccess?: () => void;
+  onSubmit: (values: TransferInput) => Promise<string | null>;
 }) {
+  const defaultValues = useMemo<TransferFormInput>(
+    () => ({
+      amount: transfer ? formatNumberWithCommas(String(transfer.amount)) : "",
+      fromChannelId: transfer?.from_channel_id || channels[0]?.id || "",
+      toChannelId: transfer?.to_channel_id || channels[1]?.id || "",
+      feeAmount: transfer?.fee_amount ? formatNumberWithCommas(String(transfer.fee_amount)) : "",
+      feeCategoryId: transfer?.fee_category_id || "",
+      note: transfer?.note || "",
+      transferredAt: transfer?.transferred_at || todayDate(),
+    }),
+    [channels, transfer]
+  );
   const {
     register,
     handleSubmit,
+    reset,
     setValue,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<TransferFormInput>({
     resolver: zodResolver(transferSchema),
-    defaultValues: {
-      amount: "",
-      fromChannelId: channels[0]?.id || "",
-      toChannelId: channels[1]?.id || "",
-      feeAmount: "",
-      feeCategoryId: "",
-      note: "",
-      transferredAt: todayDate(),
-    },
+    defaultValues,
   });
 
   const [saved, setSaved] = useState(false);
   const expenseCategories = categories.filter((category) => category.type === "expense");
+
+  useEffect(() => {
+    reset(defaultValues);
+  }, [defaultValues, reset]);
 
   async function handleFormSubmit(data: TransferFormInput) {
     const parsedAmount = parseFormattedNumber(data.amount);
@@ -103,6 +106,7 @@ export function TransferForm({
     }
 
     setSaved(true);
+    onSuccess?.();
   }
 
   if (channels.length < 2) {

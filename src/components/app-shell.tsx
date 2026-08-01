@@ -22,7 +22,7 @@ type ProtectedPageProps = {
   context: HouseholdContext;
 };
 
-type NavIconName = "garden" | "spend" | "move" | "jars" | "wallets";
+type NavIconName = "garden" | "spend" | "move" | "jars" | "wallets" | "more";
 
 type NavItem = {
   href: string;
@@ -54,6 +54,21 @@ const actionItems: ActionItem[] = [
     label: "Move money",
     description: "Move funds between wallets",
     icon: "move",
+  },
+];
+
+const moreItems: ActionItem[] = [
+  {
+    href: "/categories",
+    label: "Jars",
+    description: "Organize your spending categories",
+    icon: "jars",
+  },
+  {
+    href: "/channels",
+    label: "Wallets",
+    description: "Manage the places holding your money",
+    icon: "wallets",
   },
 ];
 
@@ -106,6 +121,7 @@ function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconName; className
           <path d="M15.5 11h.01" />
         </>
       ) : null}
+      {name === "more" ? <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="2.8" /> : null}
     </svg>
   );
 }
@@ -214,22 +230,25 @@ function ProfileLink({ user }: { user: User }) {
 
 export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
-  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<"actions" | "more" | null>(null);
+  const quickActionsOpen = openMenu === "actions";
+  const moreMenuOpen = openMenu === "more";
+  const moreMenuActive = moreItems.some((item) => isActiveNavItem(pathname, item));
 
   useEffect(() => {
-    if (!quickActionsOpen) {
+    if (!openMenu) {
       return;
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        setQuickActionsOpen(false);
+        setOpenMenu(null);
       }
     }
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [quickActionsOpen]);
+  }, [openMenu]);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
@@ -274,12 +293,12 @@ export function AppShell({ children, user }: AppShellProps) {
         </div>
         {user ? (
           <>
-            {quickActionsOpen ? (
+            {openMenu ? (
               <button
                 type="button"
                 className="fixed inset-0 z-30 bg-foreground/5 backdrop-blur-[1px] md:hidden"
-                aria-label="Close quick actions"
-                onClick={() => setQuickActionsOpen(false)}
+                aria-label="Close navigation menu"
+                onClick={() => setOpenMenu(null)}
               />
             ) : null}
             <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 px-2 pt-1 md:hidden" aria-label="Primary navigation">
@@ -292,17 +311,28 @@ export function AppShell({ children, user }: AppShellProps) {
                   >
                     <p className="px-3 pb-2 text-xs font-black uppercase tracking-[0.12em] text-muted">Quick actions</p>
                     {actionItems.map((action) => (
-                      <ActionLink key={action.href} action={action} onClick={() => setQuickActionsOpen(false)} />
+                      <ActionLink key={action.href} action={action} onClick={() => setOpenMenu(null)} />
+                    ))}
+                  </div>
+                ) : null}
+                {moreMenuOpen ? (
+                  <div
+                    className="absolute bottom-[calc(100%+0.75rem)] left-1/2 z-50 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-3xl border border-border bg-card p-3 shadow-[0_16px_40px_rgba(63,52,50,0.18)]"
+                    role="menu"
+                    aria-label="More destinations"
+                  >
+                    <p className="px-3 pb-2 text-xs font-black uppercase tracking-[0.12em] text-muted">More places</p>
+                    {moreItems.map((item) => (
+                      <ActionLink key={item.href} action={item} onClick={() => setOpenMenu(null)} />
                     ))}
                   </div>
                 ) : null}
                 <div className="app-nav-grid">
-                  {navItems.slice(0, 2).map((item) => (
-                    <AppNavLink key={item.href} item={item} pathname={pathname} />
-                  ))}
+                  <AppNavLink item={navItems[0]} pathname={pathname} />
+                  <AppNavLink item={navItems[1]} pathname={pathname} />
                   <button
                     type="button"
-                    onClick={() => setQuickActionsOpen((current) => !current)}
+                    onClick={() => setOpenMenu((current) => (current === "actions" ? null : "actions"))}
                     className={classNames(
                       "-mt-7 flex h-14 w-14 flex-col items-center justify-center justify-self-center rounded-full border-4 border-card text-sm font-black text-foreground shadow-[0_12px_26px_rgba(217,111,145,0.32)] transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent active:scale-95 sm:-mt-8 sm:h-16 sm:w-16",
                       quickActionsOpen ? "bg-primary-dark text-white" : "bg-primary"
@@ -319,9 +349,25 @@ export function AppShell({ children, user }: AppShellProps) {
                     </span>
                     <span className="text-[9px] leading-none">Add</span>
                   </button>
-                  {navItems.slice(2).map((item) => (
-                    <AppNavLink key={item.href} item={item} pathname={pathname} />
-                  ))}
+                  <AppNavLink item={navItems[2]} pathname={pathname} />
+                  <button
+                    type="button"
+                    onClick={() => setOpenMenu((current) => (current === "more" ? null : "more"))}
+                    className={classNames(
+                      "group flex min-h-12 flex-col items-center justify-center rounded-2xl text-[10px] font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent active:scale-95 sm:min-h-14 sm:text-[11px]",
+                      moreMenuOpen || moreMenuActive
+                        ? "bg-accent text-primary-dark shadow-inner"
+                        : "text-muted hover:bg-accent/55 hover:text-foreground"
+                    )}
+                    aria-label="Open more destinations"
+                    aria-expanded={moreMenuOpen}
+                    aria-haspopup="menu"
+                  >
+                    <span className="flex h-6 items-center justify-center">
+                      <NavIcon name="more" className="h-[1.3rem] w-[1.3rem]" />
+                    </span>
+                    <span>More</span>
+                  </button>
                 </div>
               </div>
             </nav>

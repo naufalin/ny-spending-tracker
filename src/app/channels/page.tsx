@@ -132,8 +132,8 @@ function ChannelsContent({ householdId }: { householdId: string }) {
         eyebrow="Money paths"
         title="Wallets"
         action={
-          <Link href="/transfers/new" className={buttonClassName}>
-            Transfer
+          <Link href="/transfers/new" className={`${buttonClassName} w-full sm:w-auto`}>
+            Move money
           </Link>
         }
       />

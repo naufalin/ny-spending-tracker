@@ -11,6 +11,7 @@ import {
   ProtectedPage,
   buttonClassName,
   inputClassName,
+  secondaryButtonClassName,
 } from "@/components/app-shell";
 import { TransferForm } from "@/components/transfer-form";
 import { deleteTransfer as removeTransfer, saveTransfer } from "@/lib/transfers";
@@ -28,6 +29,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
   const [message, setMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmingTransfer, setConfirmingTransfer] = useState<Transfer | null>(null);
   const [editingTransfer, setEditingTransfer] = useState<Transfer | null>(null);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -170,15 +172,12 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
     return profiles[transfer.user_id]?.display_name || "Member";
   }
 
-  async function handleDelete(transfer: Transfer) {
-    const shouldDelete = window.confirm(
-      "Delete this transfer? Any linked transfer fee expense will also be deleted."
-    );
-
-    if (!shouldDelete) {
+  async function confirmDelete() {
+    if (!confirmingTransfer) {
       return;
     }
 
+    const transfer = confirmingTransfer;
     setDeletingId(transfer.id);
     setMessage("");
 
@@ -192,6 +191,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
     }
 
     setTransfers((current) => current.filter((item) => item.id !== transfer.id));
+    setConfirmingTransfer(null);
   }
 
   function clearFilters() {
@@ -209,8 +209,8 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
         eyebrow="Money paths"
         title="Transfers"
         action={
-          <Link href="/transfers/new" className={buttonClassName}>
-            New transfer
+          <Link href="/transfers/new" className={`${buttonClassName} w-full sm:w-auto`}>
+            Move money
           </Link>
         }
       />
@@ -231,7 +231,16 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
       ) : (
         <div className="space-y-3">
           <Card>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-foreground">Find a move</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Filter wallet-to-wallet activity by date, person, or note.</p>
+              </div>
+              <span className="rounded-full bg-secondary/20 px-3 py-1 text-xs font-black text-foreground">
+                {filteredTransfers.length} shown
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="From date">
                 <input
                   type="date"
@@ -299,7 +308,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                   placeholder="ATM, savings, rent..."
                 />
               </Field>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <button
                   type="button"
                   onClick={clearFilters}
@@ -312,7 +321,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
           </Card>
 
           <Card>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <div className="rounded-2xl bg-background p-3">
                 <p className="text-xs font-bold text-muted">Transfers</p>
                 <p className="mt-1 text-lg font-black text-foreground">{filteredTransfers.length}</p>
@@ -334,10 +343,10 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
 
           {filteredTransfers.map((transfer) => (
             <Card key={transfer.id}>
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
+                    <span className="inline-block max-w-full break-words rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
                       {transfer.from_channel?.name || "Source"} → {transfer.to_channel?.name || "Destination"}
                     </span>
                     <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
@@ -357,9 +366,9 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                     </p>
                   ) : null}
                 </div>
-                <p className="shrink-0 text-right font-black text-secondary">{formatIdr(transfer.amount)}</p>
+                <p className="shrink-0 text-left text-xl font-black text-secondary sm:text-right">{formatIdr(transfer.amount)}</p>
               </div>
-              <div className="mt-4 flex justify-end gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setEditingTransfer(transfer)}
@@ -369,7 +378,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleDelete(transfer)}
+                  onClick={() => setConfirmingTransfer(transfer)}
                   disabled={deletingId === transfer.id}
                   className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark disabled:opacity-60"
                 >
@@ -411,6 +420,48 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
               return error;
             }}
           />
+        ) : null}
+      </Modal>
+
+      <Modal
+        open={confirmingTransfer !== null}
+        onClose={() => {
+          if (!deletingId) {
+            setConfirmingTransfer(null);
+          }
+        }}
+        title="Delete transfer?"
+      >
+        {confirmingTransfer ? (
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              This removes the wallet move. Any linked fee expense will be removed too.
+            </p>
+            <div className="rounded-2xl bg-background px-4 py-3">
+              <p className="text-sm font-black text-foreground">
+                {confirmingTransfer.from_channel?.name || "Source"} → {confirmingTransfer.to_channel?.name || "Destination"}
+              </p>
+              <p className="mt-1 text-sm font-black text-secondary">{formatIdr(confirmingTransfer.amount)}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingTransfer(null)}
+                disabled={deletingId !== null}
+                className={secondaryButtonClassName}
+              >
+                Keep it
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                disabled={deletingId !== null}
+                className={`${buttonClassName} bg-primary-dark text-white hover:bg-primary-dark`}
+              >
+                {deletingId ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
         ) : null}
       </Modal>
     </>

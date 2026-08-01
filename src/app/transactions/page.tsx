@@ -181,24 +181,24 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         eyebrow="Spending basket"
         title="Spending basket"
         action={
-          <div className="flex flex-col items-end gap-2">
+          <div className="w-full sm:w-auto">
             <GoogleSheetsSyncButton householdId={householdId} />
-            <div className="flex gap-2">
-            <Link
-              href="/transfers"
-              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
-            >
-              Transfer history
-            </Link>
-            <Link
-              href="/transfers/new"
-              className="rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
-            >
-              Transfer
-            </Link>
-            <Link href="/transactions/new" className={buttonClassName}>
-              Add
-            </Link>
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:flex">
+              <Link
+                href="/transfers"
+                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+              >
+                Transfers
+              </Link>
+              <Link
+                href="/transfers/new"
+                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+              >
+                Move money
+              </Link>
+              <Link href="/transactions/new" className={`${buttonClassName} col-span-2 sm:col-span-1`}>
+                Add spending
+              </Link>
             </div>
           </div>
         }

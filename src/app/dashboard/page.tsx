@@ -6,9 +6,9 @@ import type { User } from "@supabase/supabase-js";
 import {
   Card,
   EmptyState,
-  PageHeader,
   ProtectedPage,
   buttonClassName,
+  secondaryButtonClassName,
 } from "@/components/app-shell";
 import { classNames, formatDate, formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -17,12 +17,6 @@ import type { Subcategory } from "@/types/database";
 
 type CategoryTotal = {
   id?: string;
-  name: string;
-  amount: number;
-};
-
-type SubcategoryTotal = {
-  id: string;
   name: string;
   amount: number;
 };
@@ -226,9 +220,6 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
   useEffect(() => {
     let isMounted = true;
-    setJarLoading(true);
-    setJarExpanded(false);
-    setSelectedJarId(null);
 
     const monthDate = new Date(`${selectedMonth}-01T00:00:00`);
     const start = `${selectedMonth}-01`;
@@ -424,17 +415,52 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
   return (
     <>
-      <PageHeader
-        eyebrow="Monthly garden"
-        title={`Hello, ${greetingName}`}
-        action={
-          <Link href="/transactions/new" className={buttonClassName}>
-            Add
-          </Link>
-        }
-      />
-
       <div className="space-y-4">
+        <section
+          aria-labelledby="dashboard-heading"
+          className="relative overflow-hidden rounded-[2rem] border border-border bg-[radial-gradient(circle_at_92%_8%,#F6D6DE,transparent_26%),linear-gradient(145deg,#FFFFFF_8%,#FFF9F2_52%,#F0F7ED)] p-5 shadow-[0_16px_42px_rgba(217,111,145,0.14)] sm:p-6"
+        >
+          <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-accent/75" />
+          <div className="pointer-events-none absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-secondary/20" />
+          <div className="pointer-events-none absolute right-8 top-8 rotate-12 text-6xl opacity-90 soft-bloom" aria-hidden="true">
+            🌸
+          </div>
+          <div className="pointer-events-none absolute bottom-28 right-5 text-xl opacity-70" aria-hidden="true">
+            ✿
+          </div>
+
+          <div className="relative">
+            <p className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
+              <span aria-hidden="true">✿</span>
+              Monthly garden
+            </p>
+            <p className="mt-5 text-sm font-black text-primary-dark">A little check-in for your home</p>
+            <h1 id="dashboard-heading" className="mt-1 max-w-[18rem] text-[2.65rem] font-black leading-[0.98] tracking-tight text-foreground sm:text-5xl">
+              Hello, {greetingName}
+            </h1>
+            <p className="mt-3 max-w-[19rem] text-sm leading-6 text-muted">
+              Little expenses, big memories. Let&apos;s see how your garden is growing.
+            </p>
+
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <Link
+                href="/transactions/new"
+                className={`${buttonClassName} min-h-14 flex-col gap-0.5 rounded-2xl px-3 py-2 text-xs sm:text-sm`}
+              >
+                <span className="text-lg leading-none" aria-hidden="true">🧺</span>
+                <span>Add spending</span>
+              </Link>
+              <Link
+                href="/transfers/new"
+                className={`${secondaryButtonClassName} min-h-14 flex-col gap-0.5 rounded-2xl bg-white/70 px-3 py-2 text-xs sm:text-sm`}
+              >
+                <span className="text-lg leading-none" aria-hidden="true">⇄</span>
+                <span>Move money</span>
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {showSetupChecklist ? (
           <Card className="bg-[linear-gradient(145deg,#FFFFFF,#FFF9F2)]">
             <div className="mb-4 flex items-center gap-2">
@@ -489,7 +515,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             🌸
           </div>
           <div className="relative">
-            <p className="text-sm font-black text-primary-dark">This month's garden</p>
+            <p className="text-sm font-black text-primary-dark">This month&apos;s garden</p>
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"
@@ -523,7 +549,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-card text-xl">
             ☀️
           </div>
-          <p className="text-sm font-black text-muted">Today's petals</p>
+          <p className="text-sm font-black text-muted">Today&apos;s petals</p>
           <p className="mt-2 text-2xl font-black text-foreground">
             {loading ? "..." : formatDashboardMoney(todayTotal)}
           </p>
@@ -577,7 +603,12 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             <input
               type="month"
               value={selectedMonth}
-              onChange={(event) => setSelectedMonth(event.target.value)}
+              onChange={(event) => {
+                setSelectedMonth(event.target.value);
+                setJarLoading(true);
+                setJarExpanded(false);
+                setSelectedJarId(null);
+              }}
               className="rounded-xl border border-border bg-white/60 px-2 py-1 text-xs font-bold text-muted outline-none focus:border-primary-dark focus:ring-2 focus:ring-accent"
             />
           </div>

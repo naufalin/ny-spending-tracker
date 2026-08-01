@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PageHeader, ProtectedPage } from "@/components/app-shell";
 import { TransferForm } from "@/components/transfer-form";
+import { calculateChannelBalances } from "@/lib/transfers";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { saveTransfer } from "@/lib/transfers";
 import type { Category, Channel } from "@/types/database";
@@ -19,12 +20,13 @@ function NewTransferContent({
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [channelBalances, setChannelBalances] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadOptions() {
-      const [categoryResult, channelResult] = await Promise.all([
+      const [categoryResult, channelResult, transactionResult, transferResult] = await Promise.all([
         supabase
           .from("categories")
           .select("*")
@@ -35,11 +37,28 @@ function NewTransferContent({
           .select("*")
           .eq("household_id", householdId)
           .order("name"),
+        supabase
+          .from("transactions")
+          .select("channel_id, type, amount")
+          .eq("household_id", householdId),
+        supabase
+          .from("transfers")
+          .select("from_channel_id, to_channel_id, amount")
+          .eq("household_id", householdId),
       ]);
 
       if (isMounted) {
-        setCategories((categoryResult.data || []) as Category[]);
-        setChannels((channelResult.data || []) as Channel[]);
+        const nextCategories = (categoryResult.data || []) as Category[];
+        const nextChannels = (channelResult.data || []) as Channel[];
+        setCategories(nextCategories);
+        setChannels(nextChannels);
+        setChannelBalances(
+          calculateChannelBalances(
+            nextChannels,
+            transactionResult.data || [],
+            transferResult.data || []
+          )
+        );
       }
     }
 
@@ -56,6 +75,7 @@ function NewTransferContent({
       <TransferForm
         categories={categories}
         channels={channels}
+        channelBalances={channelBalances}
         submitLabel="Save transfer"
         successMessage="Transfer saved."
         onSubmit={async (values) => {

@@ -1,5 +1,40 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { TransferInput } from "@/types/database";
+import type { Channel, Transaction, Transfer, TransferInput } from "@/types/database";
+
+type BalanceTransaction = Pick<Transaction, "channel_id" | "type" | "amount">;
+type BalanceTransfer = Pick<Transfer, "from_channel_id" | "to_channel_id" | "amount">;
+
+export function calculateChannelBalances(
+  channels: Pick<Channel, "id">[],
+  transactions: BalanceTransaction[],
+  transfers: BalanceTransfer[]
+) {
+  const balances = channels.reduce<Record<string, number>>((acc, channel) => {
+    acc[channel.id] = 0;
+    return acc;
+  }, {});
+
+  for (const transaction of transactions) {
+    if (!transaction.channel_id || balances[transaction.channel_id] === undefined) {
+      continue;
+    }
+
+    balances[transaction.channel_id] +=
+      transaction.type === "income" ? transaction.amount : -transaction.amount;
+  }
+
+  for (const transfer of transfers) {
+    if (balances[transfer.from_channel_id] !== undefined) {
+      balances[transfer.from_channel_id] -= transfer.amount;
+    }
+
+    if (balances[transfer.to_channel_id] !== undefined) {
+      balances[transfer.to_channel_id] += transfer.amount;
+    }
+  }
+
+  return balances;
+}
 
 type SaveTransferOptions = {
   supabase: SupabaseClient;

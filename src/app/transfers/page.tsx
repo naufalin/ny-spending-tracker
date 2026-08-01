@@ -232,11 +232,11 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
         <div className="space-y-3">
           <Card>
             <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-black text-foreground">Find a move</p>
                 <p className="mt-1 text-xs leading-5 text-muted">Filter wallet-to-wallet activity by date, person, or note.</p>
               </div>
-              <span className="rounded-full bg-secondary/20 px-3 py-1 text-xs font-black text-foreground">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-secondary/20 px-3 py-1 text-xs font-black text-foreground">
                 {filteredTransfers.length} shown
               </span>
             </div>

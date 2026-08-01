@@ -335,7 +335,10 @@ function CategoriesContent({ householdId }: { householdId: string }) {
         eyebrow="Little jars"
         title="Spending jars"
         action={
-          <Link href="/budgets" className={secondaryButtonClassName}>
+          <Link
+            href="/budgets"
+            className={`${secondaryButtonClassName} min-h-10 w-fit rounded-full px-4 py-2 text-xs`}
+          >
             Budgets
           </Link>
         }

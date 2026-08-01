@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, Field, Modal, PageHeader, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
+import { Card, EmptyState, Field, Modal, ProtectedPage, buttonClassName, inputClassName } from "@/components/app-shell";
 import { TransactionForm } from "@/components/transaction-form";
 import { formatDate, formatIdr, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -177,32 +177,32 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
   return (
     <>
-      <PageHeader
-        eyebrow="Spending basket"
-        title="Spending basket"
-        action={
-          <div className="w-full sm:w-auto">
-            <GoogleSheetsSyncButton householdId={householdId} />
-            <div className="mt-2 grid grid-cols-2 gap-2 sm:flex">
-              <Link
-                href="/transfers"
-                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
-              >
-                Transfers
-              </Link>
-              <Link
-                href="/transfers/new"
-                className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
-              >
-                Move money
-              </Link>
-              <Link href="/transactions/new" className={`${buttonClassName} col-span-2 sm:col-span-1`}>
-                Add spending
-              </Link>
-            </div>
-          </div>
-        }
-      />
+      <header className="mb-5 petal-rise">
+        <p className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-bold text-primary-dark">
+          <span aria-hidden="true">✿</span>
+          Spending basket
+        </p>
+        <h1 className="mt-2 break-words text-[2rem] font-black leading-tight tracking-normal text-foreground sm:text-3xl">
+          Spending basket
+        </h1>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+          <Link
+            href="/transfers"
+            className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+          >
+            Transfers
+          </Link>
+          <Link
+            href="/transfers/new"
+            className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+          >
+            Move money
+          </Link>
+          <Link href="/transactions/new" className={`${buttonClassName} col-span-2 sm:col-span-1`}>
+            Add spending
+          </Link>
+        </div>
+      </header>
 
       {loading ? (
         <EmptyState title="Gathering spending" body="Your ledger is opening up." />
@@ -211,6 +211,15 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       ) : (
         <div className="space-y-3">
           <Card>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-foreground">Find spending</p>
+                <p className="mt-1 text-xs leading-5 text-muted">Narrow the basket by month, type, jar, or wallet.</p>
+              </div>
+              <div className="shrink-0">
+                <GoogleSheetsSyncButton householdId={householdId} />
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Month">
                 <input

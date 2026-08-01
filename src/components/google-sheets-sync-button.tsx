@@ -28,7 +28,12 @@ export function GoogleSheetsSyncButton({ householdId }: { householdId: string })
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <button type="button" onClick={sync} disabled={syncing} className={secondaryButtonClassName}>
+      <button
+        type="button"
+        onClick={sync}
+        disabled={syncing}
+        className={`${secondaryButtonClassName} min-h-10 rounded-full px-4 py-2 text-xs`}
+      >
         {syncing ? "Syncing..." : "Sync to Sheets"}
       </button>
       {message ? <span className="text-xs font-bold text-primary-dark">{message}</span> : null}

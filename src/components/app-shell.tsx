@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { classNames } from "@/lib/utils";
@@ -33,6 +33,55 @@ type NavItem = {
 type ActionItem = NavItem & {
   description: string;
 };
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "little-ledger-sidebar-collapsed";
+const sidebarPreferenceListeners = new Set<() => void>();
+let sidebarCollapsedFallback = false;
+
+function getSidebarCollapsedPreference() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true";
+  } catch {
+    return sidebarCollapsedFallback;
+  }
+}
+
+function subscribeToSidebarPreference(listener: () => void) {
+  sidebarPreferenceListeners.add(listener);
+
+  if (typeof window === "undefined") {
+    return () => sidebarPreferenceListeners.delete(listener);
+  }
+
+  function handleStorage(event: StorageEvent) {
+    if (event.key === SIDEBAR_COLLAPSED_STORAGE_KEY) {
+      listener();
+    }
+  }
+
+  window.addEventListener("storage", handleStorage);
+
+  return () => {
+    sidebarPreferenceListeners.delete(listener);
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function setSidebarCollapsedPreference(collapsed: boolean) {
+  sidebarCollapsedFallback = collapsed;
+
+  try {
+    window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(collapsed));
+  } catch {
+    // The toggle should still work when local storage is unavailable.
+  }
+
+  sidebarPreferenceListeners.forEach((listener) => listener());
+}
 
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Garden", icon: "garden" },
@@ -145,10 +194,12 @@ function AppNavLink({
   item,
   pathname,
   desktop = false,
+  collapsed = false,
 }: {
   item: NavItem;
   pathname: string;
   desktop?: boolean;
+  collapsed?: boolean;
 }) {
   const isActive = isActiveNavItem(pathname, item);
 
@@ -156,10 +207,14 @@ function AppNavLink({
     <Link
       href={item.href}
       aria-current={isActive ? "page" : undefined}
+      title={desktop && collapsed ? item.label : undefined}
       className={classNames(
         "group transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent active:scale-95",
         desktop
-          ? "flex min-h-12 items-center gap-3 rounded-2xl px-3 text-sm font-black"
+          ? classNames(
+              "flex min-h-12 items-center rounded-2xl text-sm font-black",
+              collapsed ? "justify-center px-2" : "gap-3 px-3"
+            )
           : "flex min-h-12 flex-col items-center justify-center rounded-2xl text-[10px] font-bold sm:min-h-14 sm:text-[11px]",
         isActive
           ? "bg-accent text-primary-dark shadow-inner"
@@ -169,7 +224,7 @@ function AppNavLink({
       <span className={classNames(desktop ? "flex h-6 w-6 items-center justify-center" : "flex h-6 items-center justify-center")}>
         <NavIcon name={item.icon} className={desktop ? "h-5 w-5" : "h-[1.3rem] w-[1.3rem]"} />
       </span>
-      <span>{item.label}</span>
+      <span className={desktop && collapsed ? "sr-only" : undefined}>{item.label}</span>
     </Link>
   );
 }
@@ -178,19 +233,25 @@ function ActionLink({
   action,
   onClick,
   compact = false,
+  collapsed = false,
 }: {
   action: ActionItem;
   onClick?: () => void;
   compact?: boolean;
+  collapsed?: boolean;
 }) {
   return (
     <Link
       href={action.href}
       onClick={onClick}
+      title={compact && collapsed ? `${action.label}: ${action.description}` : undefined}
       className={classNames(
         "group flex items-center gap-3 rounded-2xl text-left transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent",
         compact
-          ? "border border-border bg-card px-3 py-3 hover:border-primary hover:bg-accent/55"
+          ? classNames(
+              "border border-border bg-card py-3 hover:border-primary hover:bg-accent/55",
+              collapsed ? "justify-center px-2" : "px-3"
+            )
           : "px-3 py-3 hover:bg-background"
       )}
       role={compact ? undefined : "menuitem"}
@@ -203,7 +264,7 @@ function ActionLink({
       >
         <NavIcon name={action.icon} className="h-5 w-5" />
       </span>
-      <span className="min-w-0">
+      <span className={collapsed ? "sr-only" : "min-w-0"}>
         <span className="block text-sm font-black text-foreground">{action.label}</span>
         <span className="block text-xs leading-5 text-muted">{action.description}</span>
       </span>
@@ -231,9 +292,18 @@ function ProfileLink({ user }: { user: User }) {
 export function AppShell({ children, user }: AppShellProps) {
   const pathname = usePathname();
   const [openMenu, setOpenMenu] = useState<"actions" | "more" | null>(null);
+  const sidebarCollapsed = useSyncExternalStore(
+    subscribeToSidebarPreference,
+    getSidebarCollapsedPreference,
+    () => false
+  );
   const quickActionsOpen = openMenu === "actions";
   const moreMenuOpen = openMenu === "more";
   const moreMenuActive = moreItems.some((item) => isActiveNavItem(pathname, item));
+
+  function toggleSidebar() {
+    setSidebarCollapsedPreference(!sidebarCollapsed);
+  }
 
   useEffect(() => {
     if (!openMenu) {
@@ -251,40 +321,59 @@ export function AppShell({ children, user }: AppShellProps) {
   }, [openMenu]);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
-      <div className="pointer-events-none absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
-      <div className="pointer-events-none absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
+    <div className="relative min-h-screen bg-background">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
+        <div className="absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
+      </div>
       <div className="mx-auto flex min-h-screen w-full max-w-md flex-col md:max-w-6xl md:flex-row">
         {user ? (
-          <aside className="hidden md:sticky md:top-0 md:flex md:h-screen md:max-h-screen md:w-64 md:shrink-0 md:flex-col md:overflow-y-auto md:border-r md:border-border/70 md:bg-card/45 md:px-5 md:py-6">
-            <Link href="/dashboard" className="flex items-center gap-3" aria-label="Go to dashboard">
-              <BrandMark className="h-11 w-11 shadow-sm" />
-              <span className="text-lg font-black text-foreground">Little Ledger</span>
-            </Link>
-            <p className="mt-2 px-1 text-xs leading-5 text-muted">A gentle home for everyday money.</p>
-            <nav className="mt-10 space-y-2" aria-label="Primary navigation">
+          <aside
+            id="desktop-sidebar"
+            className={classNames(
+              "hidden md:sticky md:top-0 md:flex md:h-screen md:max-h-screen md:shrink-0 md:self-start md:flex-col md:overflow-x-hidden md:overflow-y-auto md:border-r md:border-border/70 md:bg-card/45 md:py-6 md:transition-[width,padding] md:duration-300 md:ease-out",
+              sidebarCollapsed ? "md:w-20 md:px-3" : "md:w-64 md:px-5"
+            )}
+          >
+            <div className={classNames("flex", sidebarCollapsed ? "flex-col items-center gap-3" : "items-center justify-between gap-3")}>
+              <Link href="/dashboard" className="flex min-w-0 items-center gap-3" aria-label="Go to dashboard">
+                <BrandMark className="h-11 w-11 shadow-sm" />
+                <span className={classNames("text-lg font-black text-foreground", sidebarCollapsed && "sr-only")}>Little Ledger</span>
+              </Link>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted transition hover:bg-accent hover:text-primary-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                aria-expanded={!sidebarCollapsed}
+                aria-controls="desktop-sidebar"
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  {sidebarCollapsed ? <path d="m7.5 4.5 5 5-5 5" /> : <path d="m12.5 4.5-5 5 5 5" />}
+                </svg>
+              </button>
+            </div>
+            <p className={classNames("mt-2 px-1 text-xs leading-5 text-muted", sidebarCollapsed && "sr-only")}>A gentle home for everyday money.</p>
+            <nav className={classNames("space-y-2", sidebarCollapsed ? "mt-6" : "mt-10")} aria-label="Primary navigation">
               {navItems.map((item) => (
-                <AppNavLink key={item.href} item={item} pathname={pathname} desktop />
+                <AppNavLink key={item.href} item={item} pathname={pathname} desktop collapsed={sidebarCollapsed} />
               ))}
             </nav>
-            <div className="mt-auto space-y-2 pt-8">
-              <p className="px-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted">Quick add</p>
+            <div className={classNames("mt-auto space-y-2", sidebarCollapsed ? "pt-6" : "pt-8")}>
+              <p className={classNames("px-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted", sidebarCollapsed && "sr-only")}>Quick add</p>
               {actionItems.map((action) => (
-                <ActionLink key={action.href} action={action} compact />
+                <ActionLink key={action.href} action={action} compact collapsed={sidebarCollapsed} />
               ))}
             </div>
           </aside>
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="safe-top sticky top-0 z-30 flex items-center justify-between gap-3 bg-background/80 px-4 pb-2 pt-3 backdrop-blur-md md:static md:border-b md:border-border/60 md:bg-background/90 md:px-8 md:py-5">
+          <header className="safe-top sticky top-0 z-30 flex items-center justify-between gap-3 bg-background/80 px-4 pb-2 pt-3 backdrop-blur-md md:static md:justify-end md:border-b md:border-border/60 md:bg-background/90 md:px-8 md:py-5">
             <Link href="/dashboard" className="flex min-w-0 items-center gap-2 md:hidden" aria-label="Go to dashboard">
               <BrandMark />
               <span className="truncate text-sm font-black text-foreground">Little Ledger</span>
             </Link>
-            <div className="hidden min-w-0 md:block">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary-dark">Little Ledger</p>
-              <p className="mt-1 text-sm text-muted">A softer way to keep track.</p>
-            </div>
             {user ? <ProfileLink user={user} /> : null}
           </header>
           <main className="relative flex-1 px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-3 md:mx-auto md:w-full md:max-w-5xl md:px-8 md:pb-12 md:pt-8">

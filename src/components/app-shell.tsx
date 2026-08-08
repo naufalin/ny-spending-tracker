@@ -287,7 +287,7 @@ export function AppShell({ children, user }: AppShellProps) {
             </div>
             {user ? <ProfileLink user={user} /> : null}
           </header>
-          <main className="relative z-10 flex-1 px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-3 md:mx-auto md:w-full md:max-w-5xl md:px-8 md:pb-12 md:pt-8">
+          <main className="relative flex-1 px-4 pb-[calc(8rem+env(safe-area-inset-bottom))] pt-3 md:mx-auto md:w-full md:max-w-5xl md:px-8 md:pb-12 md:pt-8">
             {children}
           </main>
         </div>

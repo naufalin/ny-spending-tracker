@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -82,9 +82,24 @@ export function TransactionForm({
     },
   });
 
+  const defaultChannelApplied = useRef(Boolean(transaction?.channel_id));
+
+  useEffect(() => {
+    if (
+      transaction ||
+      defaultChannelApplied.current ||
+      !defaultChannelId ||
+      !channels.some((channel) => channel.id === defaultChannelId)
+    ) {
+      return;
+    }
+
+    setValue("channelId", defaultChannelId);
+    defaultChannelApplied.current = true;
+  }, [channels, defaultChannelId, setValue, transaction]);
+
   const [saved, setSaved] = useState(false);
   const type = watch("type");
-  const amountValue = watch("amount");
   const filteredCategories = categories.filter((category) => category.type === type);
   const categoryId = watch("categoryId");
   const filteredSubcategories = subcategories.filter((sub) => sub.category_id === categoryId);

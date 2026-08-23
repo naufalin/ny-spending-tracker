@@ -149,6 +149,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
     return window.localStorage.getItem("our-little-ledger-setup-dismissed") === "true";
   });
+  const [setupExpanded, setSetupExpanded] = useState(false);
   const greetingName = getGreetingName(user);
 
   useEffect(() => {
@@ -344,6 +345,8 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     },
   ];
   const setupComplete = setupItems.every((item) => item.done);
+  const setupCompletedCount = setupItems.filter((item) => item.done).length;
+  const setupMostlyComplete = setupCompletedCount >= setupItems.length - 1;
   const showSetupChecklist = !loading && !setupComplete && !setupDismissed;
   const budgetProgress = budgets.map((budget) => {
     const spent = expenses
@@ -463,49 +466,106 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
         {showSetupChecklist ? (
           <Card className="bg-[linear-gradient(145deg,#FFFFFF,#FFF9F2)]">
-            <div className="mb-4 flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-                🌱
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-foreground">Plant your first garden</h2>
-                <p className="text-sm text-muted">A tiny checklist to get the ledger cozy.</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {setupItems.map((item) => (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  className="flex items-center justify-between rounded-2xl bg-background px-4 py-3 text-sm font-black text-foreground"
-                >
-                  <span>{item.label}</span>
-                  <span className={item.done ? "text-secondary" : "text-muted"}>
-                    {item.done ? "Done" : "Start"}
+            {setupMostlyComplete ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent">
+                    🌱
                   </span>
-                </Link>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={seedStarterData}
-              disabled={seeding}
-              className={`${buttonClassName} mt-4 w-full`}
-            >
-              {seeding ? "Planting..." : "Plant starter jars & wallets"}
-            </button>
-            {seedMessage ? (
-              <p className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
-                {seedMessage}
-              </p>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-black text-foreground">Garden setup</h2>
+                    <p className="text-sm text-muted">
+                      {setupCompletedCount} of {setupItems.length} steps complete
+                    </p>
+                  </div>
+                </div>
+                <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setSetupExpanded((current) => !current)}
+                    aria-expanded={setupExpanded}
+                    className="min-h-10 flex-1 rounded-2xl bg-background px-3 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark sm:flex-none"
+                  >
+                    {setupExpanded ? "Hide details" : "Review setup"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={dismissSetupChecklist}
+                    className="min-h-10 rounded-2xl border border-border px-3 py-2 text-sm font-black text-muted sm:flex-none"
+                  >
+                    Hide
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-4 flex items-center gap-2">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+                  🌱
+                </span>
+                <div>
+                  <h2 className="text-lg font-black text-foreground">Plant your first garden</h2>
+                  <p className="text-sm text-muted">A tiny checklist to get the ledger cozy.</p>
+                </div>
+              </div>
+            )}
+
+            {setupMostlyComplete ? (
+              <div
+                className="mt-3 h-2 overflow-hidden rounded-full bg-background"
+                role="progressbar"
+                aria-label="Garden setup progress"
+                aria-valuemin={0}
+                aria-valuemax={setupItems.length}
+                aria-valuenow={setupCompletedCount}
+              >
+                <div
+                  className="h-full rounded-full bg-secondary transition-[width]"
+                  style={{ width: `${(setupCompletedCount / setupItems.length) * 100}%` }}
+                />
+              </div>
             ) : null}
-            <button
-              type="button"
-              onClick={dismissSetupChecklist}
-              className="mt-3 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted"
-            >
-              Hide this checklist
-            </button>
+
+            {(!setupMostlyComplete || setupExpanded) ? (
+              <>
+                <div className={setupMostlyComplete ? "mt-4 space-y-2" : "space-y-2"}>
+                  {setupItems.map((item) => (
+                    <Link
+                      key={item.label}
+                      href={item.href}
+                      className="flex items-center justify-between gap-3 rounded-2xl bg-background px-4 py-3 text-sm font-black text-foreground"
+                    >
+                      <span className="min-w-0 break-words">{item.label}</span>
+                      <span className={item.done ? "shrink-0 text-secondary" : "shrink-0 text-muted"}>
+                        {item.done ? "Done" : "Start"}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={seedStarterData}
+                  disabled={seeding}
+                  className={`${buttonClassName} mt-4 w-full`}
+                >
+                  {seeding ? "Planting..." : "Plant starter jars & wallets"}
+                </button>
+                {seedMessage ? (
+                  <p className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
+                    {seedMessage}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+
+            {!setupMostlyComplete ? (
+              <button
+                type="button"
+                onClick={dismissSetupChecklist}
+                className="mt-3 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted"
+              >
+                Hide this checklist
+              </button>
+            ) : null}
           </Card>
         ) : null}
 

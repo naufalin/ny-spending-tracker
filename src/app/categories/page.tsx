@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Card, EmptyState, PageHeader, ProtectedPage, secondaryButtonClassName, inputClassName, buttonClassName, Field } from "@/components/app-shell";
+import {
+  Card,
+  EmptyState,
+  PageHeader,
+  ProtectedPage,
+  inputClassName,
+  secondaryButtonClassName,
+} from "@/components/app-shell";
 import { CategoryForm } from "@/components/forms";
 import { classNames } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -111,7 +118,7 @@ function SubcategoryManager({
       {categorySubs.length > 0 ? (
         <div className="mb-3 space-y-1">
           {categorySubs.map((sub) => (
-            <div key={sub.id} className="flex items-center gap-2 rounded-xl bg-background px-3 py-2">
+            <div key={sub.id} className="flex flex-col gap-2 rounded-xl bg-background px-3 py-2 sm:flex-row sm:items-center">
               {editingId === sub.id ? (
                 <>
                   <input
@@ -122,44 +129,48 @@ function SubcategoryManager({
                       if (e.key === "Enter") handleUpdate(sub.id);
                       if (e.key === "Escape") setEditingId(null);
                     }}
-                    className={`${inputClassName} flex-1 py-1 text-sm`}
+                    className={`${inputClassName} min-w-0 w-full py-1 text-sm sm:flex-1`}
                     autoFocus
                   />
-                  <button
-                    type="button"
-                    onClick={() => handleUpdate(sub.id)}
-                    className="rounded-lg bg-accent px-2 py-1 text-xs font-black text-primary-dark"
-                  >
-                    Save
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingId(null)}
-                    className="rounded-lg px-2 py-1 text-xs font-bold text-muted"
-                  >
-                    Cancel
-                  </button>
+                  <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => handleUpdate(sub.id)}
+                      className="min-h-9 flex-1 rounded-lg bg-accent px-2 py-1 text-xs font-black text-primary-dark sm:flex-none"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="min-h-9 flex-1 rounded-lg px-2 py-1 text-xs font-bold text-muted sm:flex-none"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <span className="flex-1 text-sm font-bold text-foreground">{sub.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingId(sub.id);
-                      setEditName(sub.name);
-                    }}
-                    className="rounded-lg px-2 py-1 text-xs font-bold text-muted hover:bg-accent hover:text-primary-dark"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(sub.id)}
-                    className="rounded-lg px-2 py-1 text-xs font-bold text-muted hover:text-primary-dark"
-                  >
-                    Del
-                  </button>
+                  <span className="min-w-0 flex-1 break-words text-sm font-bold text-foreground">{sub.name}</span>
+                  <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(sub.id);
+                        setEditName(sub.name);
+                      }}
+                      className="min-h-9 flex-1 rounded-lg px-2 py-1 text-xs font-bold text-muted hover:bg-accent hover:text-primary-dark sm:flex-none"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(sub.id)}
+                      className="min-h-9 flex-1 rounded-lg px-2 py-1 text-xs font-bold text-muted hover:text-primary-dark sm:flex-none"
+                    >
+                      Del
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -396,33 +407,35 @@ function CategoriesContent({ householdId }: { householdId: string }) {
                     />
                   ) : (
                     <>
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-black text-foreground">{category.name}</p>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="break-words font-black text-foreground">{category.name}</p>
                           <p className="mt-1 text-sm capitalize text-muted">
                             {category.type}
-                            {subCount > 0 ? ` · ${subCount} sub-category${subCount > 1 ? "ies" : "y"}` : ""}
+                            {subCount > 0
+                              ? ` · ${subCount} ${subCount === 1 ? "sub-category" : "sub-categories"}`
+                              : ""}
                           </p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:shrink-0 sm:flex">
                           <button
                             type="button"
                             onClick={() => setExpandedId(isExpanded ? null : category.id)}
-                            className="rounded-2xl bg-background px-3 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark"
+                            className="min-h-11 w-full rounded-2xl bg-background px-3 py-2 text-sm font-black text-muted transition hover:bg-accent hover:text-primary-dark sm:w-auto"
                           >
                             {isExpanded ? "Hide" : "Subs"}
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditingId(category.id)}
-                            className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark"
+                            className="min-h-11 w-full rounded-2xl bg-accent px-3 py-2 text-sm font-black text-primary-dark sm:w-auto sm:px-4"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             onClick={() => deleteCategory(category.id)}
-                            className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted"
+                            className="min-h-11 w-full rounded-2xl border border-border px-3 py-2 text-sm font-black text-muted sm:w-auto sm:px-4"
                           >
                             Delete
                           </button>

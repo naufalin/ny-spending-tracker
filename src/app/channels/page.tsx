@@ -11,6 +11,10 @@ import {
   buttonClassName,
   inputClassName,
 } from "@/components/app-shell";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Money } from "@/components/money";
+import { Skeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { calculateChannelBalances } from "@/lib/transfers";
 import { formatDate, formatIdr } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -24,14 +28,29 @@ type WalletActivity = {
 
 const BALANCE_PAGE_SIZE = 1_000;
 
+type WalletBalanceRow = {
+  channel_id: string;
+  balance: number;
+  latest_date: string | null;
+  latest_amount: number | null;
+  latest_kind: "income" | "expense" | "transfer_in" | "transfer_out" | null;
+};
+
+const activityLabels: Record<NonNullable<WalletBalanceRow["latest_kind"]>, string> = {
+  income: "Income",
+  expense: "Spending",
+  transfer_in: "Transfer in",
+  transfer_out: "Transfer out",
+};
+
 function ChannelsContent({ householdId }: { householdId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [name, setName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
-  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -39,6 +58,8 @@ function ChannelsContent({ householdId }: { householdId: string }) {
   const [channelBalances, setChannelBalances] = useState<Record<string, number>>({});
   const [latestActivity, setLatestActivity] = useState<Record<string, WalletActivity>>({});
   const [refreshKey, setRefreshKey] = useState(0);
+  const [deletingChannel, setDeletingChannel] = useState<Channel | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,6 +69,17 @@ function ChannelsContent({ householdId }: { householdId: string }) {
       setLoadError("");
 
       try {
+        async function tryBalanceRpc() {
+          const { data, error } = await supabase
+            .rpc("wallet_balances", { p_household_id: householdId });
+
+          if (error) {
+            return null;
+          }
+
+          return (data || []) as WalletBalanceRow[];
+        }
+
         async function loadBalanceTransactions() {
           const rows: Pick<Transaction, "channel_id" | "type" | "amount" | "spent_at">[] = [];
 
@@ -101,14 +133,22 @@ function ChannelsContent({ householdId }: { householdId: string }) {
           }
         }
 
-        const [channelResult, balanceTransactions, nextTransfers] = await Promise.all([
+        const [channelResult, rpcRows, recentTransfersResult] = await Promise.all([
           supabase
             .from("channels")
             .select("*")
             .eq("household_id", householdId)
             .order("name"),
-          loadBalanceTransactions(),
-          loadTransfers(),
+          tryBalanceRpc(),
+          supabase
+            .from("transfers")
+            .select(
+              "*, from_channel:channels!transfers_from_channel_id_fkey(id, name), to_channel:channels!transfers_to_channel_id_fkey(id, name)"
+            )
+            .eq("household_id", householdId)
+            .order("transferred_at", { ascending: false })
+            .order("created_at", { ascending: false })
+            .limit(5),
         ]);
 
         if (channelResult.error) {
@@ -120,7 +160,59 @@ function ChannelsContent({ householdId }: { householdId: string }) {
         }
 
         const nextChannels = (channelResult.data || []) as Channel[];
+        let nextBalances: Record<string, number>;
         const nextActivity: Record<string, WalletActivity> = {};
+        let nextTransfers: Transfer[];
+
+        if (rpcRows) {
+          // Fast path: one aggregate query for balances and latest activity.
+          nextBalances = {};
+          for (const row of rpcRows) {
+            nextBalances[row.channel_id] = row.balance;
+            if (row.latest_date && row.latest_kind) {
+              nextActivity[row.channel_id] = {
+                amount: row.latest_amount || 0,
+                date: row.latest_date,
+                label: activityLabels[row.latest_kind],
+              };
+            }
+          }
+          nextTransfers = (recentTransfersResult.data || []) as Transfer[];
+        } else {
+          // Fallback when the wallet_balances RPC has not been installed yet.
+          const [balanceTransactions, allTransfers] = await Promise.all([
+            loadBalanceTransactions(),
+            loadTransfers(),
+          ]);
+
+          if (!isMounted) {
+            return;
+          }
+
+          nextTransfers = allTransfers;
+          nextBalances = calculateChannelBalances(nextChannels, balanceTransactions, allTransfers);
+
+          for (const transaction of balanceTransactions) {
+            recordActivity(transaction.channel_id, {
+              amount: transaction.type === "income" ? transaction.amount : -transaction.amount,
+              date: transaction.spent_at,
+              label: transaction.type === "income" ? "Income" : "Spending",
+            });
+          }
+
+          for (const transfer of allTransfers) {
+            recordActivity(transfer.from_channel_id, {
+              amount: -transfer.amount,
+              date: transfer.transferred_at,
+              label: "Transfer out",
+            });
+            recordActivity(transfer.to_channel_id, {
+              amount: transfer.amount,
+              date: transfer.transferred_at,
+              label: "Transfer in",
+            });
+          }
+        }
 
         function recordActivity(channelId: string | null, activity: WalletActivity) {
           if (!channelId || (nextActivity[channelId]?.date || "") > activity.date) {
@@ -130,30 +222,9 @@ function ChannelsContent({ householdId }: { householdId: string }) {
           nextActivity[channelId] = activity;
         }
 
-        for (const transaction of balanceTransactions) {
-          recordActivity(transaction.channel_id, {
-            amount: transaction.type === "income" ? transaction.amount : -transaction.amount,
-            date: transaction.spent_at,
-            label: transaction.type === "income" ? "Income" : "Spending",
-          });
-        }
-
-        for (const transfer of nextTransfers) {
-          recordActivity(transfer.from_channel_id, {
-            amount: -transfer.amount,
-            date: transfer.transferred_at,
-            label: "Transfer out",
-          });
-          recordActivity(transfer.to_channel_id, {
-            amount: transfer.amount,
-            date: transfer.transferred_at,
-            label: "Transfer in",
-          });
-        }
-
         setChannels(nextChannels);
         setTransfers(nextTransfers.slice(0, 5));
-        setChannelBalances(calculateChannelBalances(nextChannels, balanceTransactions, nextTransfers));
+        setChannelBalances(nextBalances);
         setLatestActivity(nextActivity);
         setLoading(false);
       } catch (error) {
@@ -176,7 +247,6 @@ function ChannelsContent({ householdId }: { householdId: string }) {
   async function createChannel(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    setMessage("");
 
     const { error } = await supabase.from("channels").insert({
       household_id: householdId,
@@ -186,18 +256,18 @@ function ChannelsContent({ householdId }: { householdId: string }) {
     setSaving(false);
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't create wallet", body: error.message, tone: "danger" });
       return;
     }
 
     setName("");
     setShowCreateForm(false);
+    addToast({ title: `${name.trim()} wallet created`, tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
   async function updateChannel(event: React.FormEvent<HTMLFormElement>, id: string) {
     event.preventDefault();
-    setMessage("");
 
     const { error } = await supabase
       .from("channels")
@@ -206,44 +276,45 @@ function ChannelsContent({ householdId }: { householdId: string }) {
       .eq("household_id", householdId);
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't rename wallet", body: error.message, tone: "danger" });
       return;
     }
 
     setEditingId(null);
     setEditingName("");
+    addToast({ title: "Wallet renamed", tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
-  async function deleteChannel(id: string) {
-    const shouldDelete = window.confirm(
-      "Delete this channel? Transactions that use it must be edited first."
-    );
-
-    if (!shouldDelete) {
+  async function handleDeleteChannelConfirm() {
+    if (!deletingChannel) {
       return;
     }
 
-    setMessage("");
+    setDeleteBusy(true);
 
     const { error } = await supabase
       .from("channels")
       .delete()
-      .eq("id", id)
+      .eq("id", deletingChannel.id)
       .eq("household_id", householdId);
 
+    setDeleteBusy(false);
+
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't delete wallet", body: error.message, tone: "danger" });
       return;
     }
 
+    setDeletingChannel(null);
+    addToast({ title: "Wallet deleted", tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
   return (
     <>
       <PageHeader
-        eyebrow="Money paths"
+        eyebrow="Money pots"
         title="Wallets"
         action={
           <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
@@ -262,12 +333,6 @@ function ChannelsContent({ householdId }: { householdId: string }) {
       />
 
       <div className="space-y-4">
-        {message ? (
-          <p aria-live="polite" className="rounded-2xl bg-accent/50 px-4 py-3 text-sm font-bold text-primary-dark">
-            {message}
-          </p>
-        ) : null}
-
         {showCreateForm ? (
           <Card>
             <form onSubmit={createChannel} className="space-y-4">
@@ -289,7 +354,23 @@ function ChannelsContent({ householdId }: { householdId: string }) {
         ) : null}
 
         {loading ? (
-          <EmptyState title="Opening wallets" body="Counting what is available in every money path." />
+          <div className="space-y-4" aria-hidden="true">
+            <Card>
+              <Skeleton className="h-9 w-52 rounded-xl" />
+            </Card>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Card>
+                <Skeleton className="h-5 w-32 rounded-lg" />
+                <Skeleton className="mt-2 h-7 w-28 rounded-lg" />
+                <Skeleton className="mt-2 h-4 w-40 rounded-lg" />
+              </Card>
+              <Card>
+                <Skeleton className="h-5 w-28 rounded-lg" />
+                <Skeleton className="mt-2 h-7 w-24 rounded-lg" />
+                <Skeleton className="mt-2 h-4 w-36 rounded-lg" />
+              </Card>
+            </div>
+          </div>
         ) : loadError ? (
           <Card>
             <h2 className="text-lg font-black text-foreground">Could not load wallet balances</h2>
@@ -309,15 +390,16 @@ function ChannelsContent({ householdId }: { householdId: string }) {
           />
         ) : (
           <>
-            <Card className="bg-[linear-gradient(145deg,#FFFFFF,#F2FAF3)]">
+            <Card className="bg-[linear-gradient(145deg,var(--card),var(--success-soft))]">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <p className="text-sm font-bold text-muted">Total balance</p>
-                  <p className="mt-1 text-3xl font-black text-foreground">
-                    {formatIdr(Object.values(channelBalances).reduce((sum, balance) => sum + balance, 0))}
-                  </p>
+                  <Money
+                    amount={Object.values(channelBalances).reduce((sum, balance) => sum + balance, 0)}
+                    className="mt-1 block text-3xl font-black"
+                  />
                 </div>
-                <p className="rounded-full bg-secondary/15 px-3 py-1 text-xs font-black text-secondary">
+                <p className="rounded-full bg-secondary/15 px-3 py-1 text-xs font-black text-success">
                   {channels.length} {channels.length === 1 ? "wallet" : "wallets"}
                 </p>
               </div>
@@ -352,13 +434,21 @@ function ChannelsContent({ householdId }: { householdId: string }) {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <p className="break-words font-black text-foreground">{channel.name}</p>
-                          <p className="mt-1 text-xl font-black text-secondary">
-                            {formatIdr(channelBalances[channel.id] || 0)}
-                          </p>
+                          <Money
+                            amount={channelBalances[channel.id] || 0}
+                            tone={(channelBalances[channel.id] || 0) < 0 ? "danger" : "neutral"}
+                            className="mt-1 block text-xl font-black"
+                          />
                           {latestActivity[channel.id] ? (
                             <p className="mt-2 text-xs font-bold text-muted">
-                              {latestActivity[channel.id].label}: {latestActivity[channel.id].amount >= 0 ? "+" : "-"}
-                              {formatIdr(Math.abs(latestActivity[channel.id].amount))} · {formatDate(latestActivity[channel.id].date)}
+                              {latestActivity[channel.id].label}:{" "}
+                              <Money
+                                amount={latestActivity[channel.id].amount}
+                                tone={latestActivity[channel.id].amount >= 0 ? "income" : "expense"}
+                                signed
+                                className="text-xs font-bold"
+                              />{" "}
+                              · {formatDate(latestActivity[channel.id].date)}
                             </p>
                           ) : (
                             <p className="mt-2 text-xs font-bold text-muted">No activity yet</p>
@@ -375,14 +465,14 @@ function ChannelsContent({ householdId }: { householdId: string }) {
                             setEditingId(channel.id);
                             setEditingName(channel.name);
                           }}
-                          className="min-h-11 rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark"
+                          className="min-h-11 rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark transition hover:bg-primary hover:text-foreground"
                         >
                           Edit
                         </button>
                         <button
                           type="button"
-                          onClick={() => deleteChannel(channel.id)}
-                          className="min-h-11 rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted"
+                          onClick={() => setDeletingChannel(channel)}
+                          className="min-h-11 rounded-2xl border border-border px-4 py-2 text-sm font-black text-danger transition hover:border-danger hover:bg-danger-soft"
                         >
                           Delete
                         </button>
@@ -427,9 +517,7 @@ function ChannelsContent({ householdId }: { householdId: string }) {
                           : ""}
                       </p>
                     </div>
-                    <p className="text-right font-black text-secondary">
-                      {formatIdr(transfer.amount)}
-                    </p>
+                    <Money amount={transfer.amount} className="text-right font-black" />
                   </div>
                   {transfer.note ? (
                     <p className="mt-2 text-sm leading-6 text-muted">{transfer.note}</p>
@@ -440,6 +528,20 @@ function ChannelsContent({ householdId }: { householdId: string }) {
           </Card>
         ) : null}
       </div>
+
+      <ConfirmDialog
+        open={deletingChannel !== null}
+        onClose={() => {
+          if (!deleteBusy) {
+            setDeletingChannel(null);
+          }
+        }}
+        onConfirm={handleDeleteChannelConfirm}
+        busy={deleteBusy}
+        title="Delete this wallet?"
+        body={`${deletingChannel?.name || "This wallet"} will be removed. Transactions that use it must be edited first, so existing records keep their history.`}
+        confirmLabel="Yes, delete wallet"
+      />
     </>
   );
 }

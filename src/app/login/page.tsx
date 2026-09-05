@@ -13,7 +13,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"info" | "danger" | "success">("info");
   const [loading, setLoading] = useState(false);
+
+  function notify(text: string, tone: "info" | "danger" | "success" = "info") {
+    setMessage(text);
+    setMessageTone(tone);
+  }
 
   function getLoginValues() {
     const formData = new FormData(formRef.current || undefined);
@@ -30,7 +36,7 @@ export default function LoginPage() {
     const values = getLoginValues();
 
     if (!values.email) {
-      setMessage("Enter your email first.");
+      notify("Enter your email first.", "danger");
       return;
     }
 
@@ -46,7 +52,10 @@ export default function LoginPage() {
     });
 
     setLoading(false);
-    setMessage(error ? error.message : "Check your email for a cozy little login link.");
+    notify(
+      error ? error.message : "Check your email for a cozy little login link.",
+      error ? "danger" : "success"
+    );
   }
 
   async function signInWithPassword(event?: React.FormEvent<HTMLFormElement>) {
@@ -55,7 +64,7 @@ export default function LoginPage() {
     const values = getLoginValues();
 
     if (!values.email || !values.password) {
-      setMessage("Enter your email and password first.");
+      notify("Enter your email and password first.", "danger");
       return;
     }
 
@@ -67,7 +76,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (error) {
-      setMessage(error.message);
+      notify(error.message, "danger");
       return;
     }
 
@@ -78,7 +87,7 @@ export default function LoginPage() {
     const values = getLoginValues();
 
     if (!values.email || !values.password) {
-      setMessage("Enter your email and password first.");
+      notify("Enter your email and password first.", "danger");
       return;
     }
 
@@ -88,7 +97,10 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signUp(values);
 
     setLoading(false);
-    setMessage(error ? error.message : "Account created. Check your email if Supabase asks you to confirm.");
+    notify(
+      error ? error.message : "Account created. Check your email if Supabase asks you to confirm.",
+      error ? "danger" : "success"
+    );
   }
 
   return (
@@ -166,7 +178,16 @@ export default function LoginPage() {
             </div>
 
             {message ? (
-              <p className="rounded-2xl bg-background px-4 py-3 text-sm leading-6 text-muted">
+              <p
+                role={messageTone === "danger" ? "alert" : "status"}
+                className={
+                  messageTone === "danger"
+                    ? "rounded-2xl bg-danger-soft px-4 py-3 text-sm font-bold leading-6 text-danger"
+                    : messageTone === "success"
+                      ? "rounded-2xl bg-success-soft px-4 py-3 text-sm font-bold leading-6 text-success"
+                      : "rounded-2xl bg-background px-4 py-3 text-sm leading-6 text-muted"
+                }
+              >
                 {message}
               </p>
             ) : null}

@@ -11,6 +11,8 @@ import {
   secondaryButtonClassName,
 } from "@/components/app-shell";
 import { classNames, formatDate, formatIdr, monthStart, nextMonthStart, todayDate } from "@/lib/utils";
+import { Money } from "@/components/money";
+import { Skeleton } from "@/components/skeleton";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Budget, Category, Channel, Transaction, Transfer } from "@/types/database";
 import type { Subcategory } from "@/types/database";
@@ -30,7 +32,14 @@ type BalanceTransaction = Pick<Transaction, "channel_id" | "type" | "amount">;
 
 type BalanceTransfer = Pick<Transfer, "from_channel_id" | "to_channel_id" | "amount">;
 
-const categoryChartColors = ["#D96F91", "#A8C7A1", "#F0B45F", "#A8B6E8", "#C99AD8", "#8DC7BC"];
+const categoryChartColors = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+  "var(--chart-6)",
+];
 
 function formatCategoryPercent(percent: number) {
   if (percent > 0 && percent < 1) {
@@ -76,7 +85,7 @@ function CategoryDonutChart({
           cy="60"
           r={radius}
           fill="none"
-          stroke="#FFF9F2"
+          style={{ stroke: "var(--background)" }}
           strokeWidth="18"
         />
         {slices.map((slice, index) => {
@@ -97,7 +106,7 @@ function CategoryDonutChart({
               cy="60"
               r={radius}
               fill="none"
-              stroke={slice.color}
+              style={{ stroke: slice.color }}
               strokeWidth="18"
               strokeDasharray={dashArray}
               strokeDashoffset={-sliceOffset}
@@ -106,7 +115,7 @@ function CategoryDonutChart({
             />
           );
         })}
-        <circle cx="60" cy="60" r="25" fill="#FFFFFF" opacity="0.92" />
+        <circle cx="60" cy="60" r="25" style={{ fill: "var(--card)" }} opacity="0.92" />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center px-10 text-center">
         <p className="text-[11px] font-black uppercase tracking-normal text-muted">Total</p>
@@ -139,7 +148,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
   });
   const [selectedMonth, setSelectedMonth] = useState(() => monthStart().slice(0, 7));
   const [jarTransactions, setJarTransactions] = useState<Transaction[]>([]);
-  const [jarLoading, setJarLoading] = useState(false);
+  const [jarLoading, setJarLoading] = useState(true);
   const [jarExpanded, setJarExpanded] = useState(false);
   const [selectedJarId, setSelectedJarId] = useState<string | null>(null);
   const [setupDismissed, setSetupDismissed] = useState(() => {
@@ -246,8 +255,12 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     };
   }, [householdId, selectedMonth, supabase]);
 
-  function formatDashboardMoney(amount: number) {
-    return numbersHidden ? "Rp ***" : formatIdr(amount);
+  function formatDashboardMoney(amount: number, options?: { signed?: boolean }) {
+    if (numbersHidden) {
+      return "Rp ***";
+    }
+
+    return options?.signed ? `-${formatIdr(amount)}` : formatIdr(amount);
   }
 
   function toggleNumbersHidden() {
@@ -421,7 +434,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
       <div className="space-y-4">
         <section
           aria-labelledby="dashboard-heading"
-          className="relative overflow-hidden rounded-[2rem] border border-border bg-[radial-gradient(circle_at_92%_8%,#F6D6DE,transparent_26%),linear-gradient(145deg,#FFFFFF_8%,#FFF9F2_52%,#F0F7ED)] p-5 shadow-[0_16px_42px_rgba(217,111,145,0.14)] sm:p-6"
+          className="relative overflow-hidden rounded-[2rem] border border-border bg-[radial-gradient(circle_at_92%_8%,var(--accent),transparent_26%),linear-gradient(145deg,var(--card)_8%,var(--background)_52%,var(--success-soft))] p-5 shadow-[0_16px_42px_rgba(217,111,145,0.14)] sm:p-6"
         >
           <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-accent/75" />
           <div className="pointer-events-none absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-secondary/20" />
@@ -438,7 +451,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               Monthly garden
             </p>
             <p className="mt-5 text-sm font-black text-primary-dark">A little check-in for your home</p>
-            <h1 id="dashboard-heading" className="mt-1 max-w-[18rem] text-[2.65rem] font-black leading-[0.98] tracking-tight text-foreground sm:text-5xl">
+            <h1 id="dashboard-heading" className="mt-1 max-w-[18rem] text-[2.65rem] font-black leading-[0.98] tracking-tight text-foreground sm:max-w-md sm:text-5xl">
               Hello, {greetingName}
             </h1>
             <p className="mt-3 max-w-[19rem] text-sm leading-6 text-muted">
@@ -465,7 +478,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
         </section>
 
         {showSetupChecklist ? (
-          <Card className="bg-[linear-gradient(145deg,#FFFFFF,#FFF9F2)]">
+          <Card className="bg-[linear-gradient(145deg,var(--card),var(--background))]">
             {setupMostlyComplete ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2">
@@ -569,7 +582,8 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           </Card>
         ) : null}
 
-        <Card className="relative overflow-hidden bg-[radial-gradient(circle_at_85%_15%,#F6D6DE,transparent_34%),linear-gradient(145deg,#FFFFFF,#FFF9F2)] p-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card className="relative overflow-hidden bg-[radial-gradient(circle_at_85%_15%,var(--accent),transparent_34%),linear-gradient(145deg,var(--card),var(--background))] p-5">
           <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-accent/80" />
           <div className="pointer-events-none absolute right-6 top-8 rotate-12 text-5xl opacity-80 soft-bloom">
             🌸
@@ -595,9 +609,9 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                   </svg>
                 )}
               </button>
-              <p className="text-4xl font-black leading-tight text-foreground">
-                {loading ? "..." : formatDashboardMoney(monthTotal)}
-              </p>
+              <div className="min-h-[2.5rem] text-4xl font-black leading-tight text-foreground">
+                {loading ? <Skeleton className="h-10 w-44 rounded-2xl" /> : formatDashboardMoney(monthTotal)}
+              </div>
             </div>
             <p className="mt-3 max-w-[15rem] text-sm leading-6 text-muted">
               Little expenses, big memories.
@@ -605,17 +619,18 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           </div>
         </Card>
 
-        <Card className="bg-[linear-gradient(160deg,#FFFFFF,#F6D6DE)]">
+        <Card className="bg-[linear-gradient(160deg,var(--card),var(--accent))]">
           <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-full bg-card text-xl">
             ☀️
           </div>
           <p className="text-sm font-black text-muted">Today&apos;s petals</p>
-          <p className="mt-2 text-2xl font-black text-foreground">
-            {loading ? "..." : formatDashboardMoney(todayTotal)}
-          </p>
+          <div className="mt-2 min-h-[2rem] text-2xl font-black text-foreground">
+            {loading ? <Skeleton className="h-8 w-28 rounded-xl" /> : formatDashboardMoney(todayTotal)}
+          </div>
         </Card>
+        </div>
 
-        <Card className="bg-[linear-gradient(160deg,#FFFFFF,#EEF6EA)]">
+        <Card className="bg-[linear-gradient(160deg,var(--card),var(--success-soft))]">
           <div className="mb-4 flex items-center gap-2">
             <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
               👛
@@ -625,23 +640,26 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               <p className="text-sm text-muted">Across all wallets</p>
             </div>
           </div>
-          <p className="text-3xl font-black text-foreground">
-            {loading ? "..." : formatDashboardMoney(totalBalance)}
-          </p>
-          {walletBalances.length ? (
-            <div className="mt-4 space-y-3">
+          <div className="min-h-[2.25rem] text-3xl font-black text-foreground">
+            {loading ? <Skeleton className="h-9 w-40 rounded-2xl" /> : formatDashboardMoney(totalBalance)}
+          </div>
+          {loading ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-5 w-full rounded-lg" />
+              <Skeleton className="h-5 w-full rounded-lg" />
+              <Skeleton className="h-5 w-3/4 rounded-lg" />
+              <Skeleton className="h-5 w-3/4 rounded-lg" />
+            </div>
+          ) : walletBalances.length ? (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {walletBalances.map((wallet) => (
                 <div key={wallet.id} className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-foreground">{wallet.name}</span>
-                  <span
-                    className={
-                      wallet.amount < 0
-                        ? "text-sm font-black text-primary-dark"
-                        : "text-sm font-black text-secondary"
-                    }
-                  >
-                    {formatDashboardMoney(wallet.amount)}
-                  </span>
+                  <span className="min-w-0 truncate text-sm font-bold text-foreground">{wallet.name}</span>
+                  <Money
+                    amount={wallet.amount}
+                    tone={wallet.amount < 0 ? "danger" : "neutral"}
+                    className="text-sm font-black"
+                  />
                 </div>
               ))}
             </div>
@@ -650,7 +668,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           )}
         </Card>
 
-        <Card className="overflow-hidden bg-[linear-gradient(180deg,#FFFFFF,#FFF9F2)]">
+        <Card className="overflow-hidden bg-[linear-gradient(180deg,var(--card),var(--background))]">
           <div className="mb-4 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
@@ -672,14 +690,26 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               className="rounded-xl border border-border bg-white/60 px-2 py-1 text-xs font-bold text-muted outline-none focus:border-primary-dark focus:ring-2 focus:ring-accent"
             />
           </div>
-          {categoryChartSlices.length && jarTotal > 0 ? (
-            <div className="mt-5">
-              <CategoryDonutChart
-                slices={categoryChartSlices}
-                total={jarTotal}
-                totalLabel={formatDashboardMoney(jarTotal)}
-              />
-              <div className="mt-5 space-y-1">
+          {jarLoading ? (
+            <div className="mt-5 lg:flex lg:items-start lg:gap-8">
+              <Skeleton className="mx-auto aspect-square w-full max-w-[16rem] rounded-full lg:mx-0 lg:w-64" />
+              <div className="mt-5 flex-1 space-y-3 lg:mt-0">
+                <Skeleton className="h-9 w-full rounded-xl" />
+                <Skeleton className="h-9 w-full rounded-xl" />
+                <Skeleton className="h-9 w-5/6 rounded-xl" />
+                <Skeleton className="h-9 w-5/6 rounded-xl" />
+              </div>
+            </div>
+          ) : categoryChartSlices.length && jarTotal > 0 ? (
+            <div className="mt-5 lg:flex lg:items-start lg:gap-8">
+              <div className="lg:w-64 lg:shrink-0">
+                <CategoryDonutChart
+                  slices={categoryChartSlices}
+                  total={jarTotal}
+                  totalLabel={formatDashboardMoney(jarTotal)}
+                />
+              </div>
+              <div className="mt-5 space-y-1 lg:mt-0 lg:flex-1">
                 {(jarExpanded ? categoryChartSlices : categoryChartSlices.slice(0, 5)).map((category) => {
                   const isSelected = selectedJarId === category.id;
                   const jarTxns = isSelected
@@ -792,7 +822,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                                             <p className="text-[10px] text-muted">{formatDate(txn.spent_at)}</p>
                                           </div>
                                           <span className="shrink-0 text-xs font-black text-primary-dark">
-                                            -{formatIdr(txn.amount)}
+                                            {formatDashboardMoney(txn.amount, { signed: true })}
                                           </span>
                                         </div>
                                       ))}
@@ -813,7 +843,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                                           <p className="text-xs text-muted">{formatDate(txn.spent_at)}</p>
                                         </div>
                                         <span className="shrink-0 text-sm font-black text-primary-dark">
-                                          -{formatIdr(txn.amount)}
+                                          {formatDashboardMoney(txn.amount, { signed: true })}
                                         </span>
                                       </div>
                                     ))}
@@ -838,44 +868,54 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
                 ) : null}
               </div>
             </div>
-          ) : jarLoading ? (
-            <p className="mt-3 text-sm text-muted">Loading jar data...</p>
           ) : (
             <p className="mt-3 text-sm text-muted">No spending for this month yet. 🌸</p>
           )}
         </Card>
 
-        <Card>
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-              👛
-            </span>
-            <h2 className="text-lg font-black text-foreground">Money paths</h2>
-          </div>
-          {topChannels.length ? (
-            <div className="mt-4 space-y-3">
-              {topChannels.map((channel) => (
-                <div key={channel.name} className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-bold text-foreground">{channel.name}</span>
-                  <span className="text-sm font-black text-primary-dark">
-                    {formatDashboardMoney(channel.amount)}
-                  </span>
-                </div>
-              ))}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <div className="mb-4 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+                👛
+              </span>
+              <h2 className="text-lg font-black text-foreground">Money paths</h2>
             </div>
-          ) : (
-            <p className="mt-3 text-sm text-muted">No channel spending yet.</p>
-          )}
-        </Card>
+            {loading ? (
+              <div className="mt-4 space-y-3">
+                <Skeleton className="h-5 w-full rounded-lg" />
+                <Skeleton className="h-5 w-full rounded-lg" />
+                <Skeleton className="h-5 w-3/4 rounded-lg" />
+                <Skeleton className="h-5 w-3/4 rounded-lg" />
+              </div>
+            ) : topChannels.length ? (
+              <div className="mt-4 space-y-3">
+                {topChannels.map((channel) => (
+                  <div key={channel.name} className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-foreground">{channel.name}</span>
+                    <Money amount={channel.amount} tone="expense" className="text-sm font-black" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted">No channel spending yet.</p>
+            )}
+          </Card>
 
-        <Card className="bg-[linear-gradient(180deg,#FFFFFF,#FFF9F2)]">
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-              🌿
-            </span>
-            <h2 className="text-lg font-black text-foreground">Garden progress</h2>
-          </div>
-          {totalBudget > 0 ? (
+          <Card className="bg-[linear-gradient(180deg,var(--card),var(--background))]">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
+                🌿
+              </span>
+              <h2 className="text-lg font-black text-foreground">Garden progress</h2>
+            </div>
+            {loading ? (
+              <div className="mt-4 space-y-4">
+                <Skeleton className="h-3 w-full rounded-full" />
+                <Skeleton className="h-3 w-full rounded-full" />
+                <Skeleton className="h-3 w-2/3 rounded-full" />
+              </div>
+            ) : totalBudget > 0 ? (
             <>
               <p className="mt-2 text-sm text-muted">Remaining budget this month</p>
               <p className="mt-2 text-3xl font-black text-foreground">
@@ -912,7 +952,8 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               Add a monthly budget to see how much room is left in the garden.
             </p>
           )}
-        </Card>
+          </Card>
+        </div>
 
         {!loading && transactions.length === 0 ? (
           <EmptyState title="A fresh lily garden" body="Add today’s spending when something happens." />

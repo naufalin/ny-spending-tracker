@@ -11,6 +11,9 @@ import {
   secondaryButtonClassName,
 } from "@/components/app-shell";
 import { CategoryForm } from "@/components/forms";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Skeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { classNames } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Category, Subcategory, TransactionType } from "@/types/database";
@@ -29,16 +32,17 @@ function SubcategoryManager({
   onRefresh: () => void;
 }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [message, setMessage] = useState("");
+  const [deletingSub, setDeletingSub] = useState<Subcategory | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const categorySubs = subcategories.filter((sub) => sub.category_id === category.id);
 
   async function handleCreate() {
     if (!newName.trim()) return;
-    setMessage("");
 
     const { error } = await supabase.from("subcategories").insert({
       household_id: householdId,
@@ -47,17 +51,17 @@ function SubcategoryManager({
     });
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't add sub-category", body: error.message, tone: "danger" });
       return;
     }
 
     setNewName("");
+    addToast({ title: "Sub-category added", tone: "success" });
     onRefresh();
   }
 
   async function handleUpdate(id: string) {
     if (!editName.trim()) return;
-    setMessage("");
 
     const { error } = await supabase
       .from("subcategories")
@@ -66,46 +70,49 @@ function SubcategoryManager({
       .eq("household_id", householdId);
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't update sub-category", body: error.message, tone: "danger" });
       return;
     }
 
     setEditingId(null);
     setEditName("");
+    addToast({ title: "Sub-category updated", tone: "success" });
     onRefresh();
   }
 
-  async function handleDelete(id: string) {
-    const shouldDelete = window.confirm(
-      "Delete this sub-category? Transactions will keep their amount but lose the sub-category label."
-    );
-    if (!shouldDelete) return;
+  async function handleDeleteConfirm() {
+    if (!deletingSub) return;
 
-    setMessage("");
+    setDeleteBusy(true);
 
     // Detach subcategory from transactions first
     const { error: txnError } = await supabase
       .from("transactions")
       .update({ subcategory_id: null })
-      .eq("subcategory_id", id)
+      .eq("subcategory_id", deletingSub.id)
       .eq("household_id", householdId);
 
     if (txnError) {
-      setMessage(txnError.message);
+      addToast({ title: "Couldn't delete sub-category", body: txnError.message, tone: "danger" });
+      setDeleteBusy(false);
       return;
     }
 
     const { error } = await supabase
       .from("subcategories")
       .delete()
-      .eq("id", id)
+      .eq("id", deletingSub.id)
       .eq("household_id", householdId);
 
+    setDeleteBusy(false);
+
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't delete sub-category", body: error.message, tone: "danger" });
       return;
     }
 
+    setDeletingSub(null);
+    addToast({ title: "Sub-category deleted", tone: "success" });
     onRefresh();
   }
 
@@ -165,10 +172,10 @@ function SubcategoryManager({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(sub.id)}
-                      className="min-h-9 flex-1 rounded-lg px-2 py-1 text-xs font-bold text-muted hover:text-primary-dark sm:flex-none"
+                      onClick={() => setDeletingSub(sub)}
+                      className="min-h-9 flex-1 rounded-lg px-2 py-1 text-xs font-bold text-danger hover:bg-danger-soft sm:flex-none"
                     >
-                      Del
+                      Delete
                     </button>
                   </div>
                 </>
@@ -199,22 +206,35 @@ function SubcategoryManager({
         </button>
       </div>
 
-      {message ? (
-        <p className="mt-2 text-xs font-bold text-primary-dark">{message}</p>
-      ) : null}
+      <ConfirmDialog
+        open={deletingSub !== null}
+        onClose={() => {
+          if (!deleteBusy) {
+            setDeletingSub(null);
+          }
+        }}
+        onConfirm={handleDeleteConfirm}
+        busy={deleteBusy}
+        title="Delete sub-category?"
+        body="Transactions will keep their amount but lose this sub-category label."
+        confirmLabel="Yes, delete"
+      />
     </div>
   );
 }
 
 function CategoriesContent({ householdId }: { householdId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [typeFilter, setTypeFilter] = useState<CategoryTypeFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -237,6 +257,7 @@ function CategoriesContent({ householdId }: { householdId: string }) {
       if (isMounted) {
         setCategories((categoryResult.data || []) as Category[]);
         setSubcategories((subcategoryResult.data || []) as Subcategory[]);
+        setLoading(false);
       }
     }
 
@@ -252,8 +273,6 @@ function CategoriesContent({ householdId }: { householdId: string }) {
   );
 
   async function createCategory(values: Pick<Category, "name" | "type">) {
-    setMessage("");
-
     const { error } = await supabase.from("categories").insert({
       household_id: householdId,
       name: values.name.trim(),
@@ -261,16 +280,15 @@ function CategoriesContent({ householdId }: { householdId: string }) {
     });
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't create jar", body: error.message, tone: "danger" });
       return;
     }
 
+    addToast({ title: `${values.name.trim()} jar created`, tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
   async function updateCategory(id: string, values: Pick<Category, "name" | "type">) {
-    setMessage("");
-
     const { error } = await supabase
       .from("categories")
       .update({
@@ -281,58 +299,63 @@ function CategoriesContent({ householdId }: { householdId: string }) {
       .eq("household_id", householdId);
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't update jar", body: error.message, tone: "danger" });
       return;
     }
 
     setEditingId(null);
+    addToast({ title: "Jar updated", tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
-  async function deleteCategory(id: string) {
-    const shouldDelete = window.confirm(
-      "Delete this jar? Past transactions will stay in your ledger without a jar."
-    );
-
-    if (!shouldDelete) {
+  async function handleDeleteCategoryConfirm() {
+    if (!deletingCategory) {
       return;
     }
 
-    setMessage("");
+    setDeleteBusy(true);
 
     const [transactionResult, transferResult] = await Promise.all([
       supabase
         .from("transactions")
         .update({ category_id: null })
-        .eq("category_id", id)
+        .eq("category_id", deletingCategory.id)
         .eq("household_id", householdId),
       supabase
         .from("transfers")
         .update({ fee_category_id: null })
-        .eq("fee_category_id", id)
+        .eq("fee_category_id", deletingCategory.id)
         .eq("household_id", householdId),
     ]);
 
     if (transactionResult.error || transferResult.error) {
-      setMessage(
-        transactionResult.error?.message ||
+      addToast({
+        title: "Couldn't delete jar",
+        body:
+          transactionResult.error?.message ||
           transferResult.error?.message ||
-          "Unable to detach this jar from existing records."
-      );
+          "Unable to detach this jar from existing records.",
+        tone: "danger",
+      });
+      setDeleteBusy(false);
       return;
     }
 
     const { error } = await supabase
       .from("categories")
       .delete()
-      .eq("id", id)
+      .eq("id", deletingCategory.id)
       .eq("household_id", householdId);
 
+    setDeleteBusy(false);
+
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't delete jar", body: error.message, tone: "danger" });
       return;
     }
 
+    setDeletingCategory(null);
+    addToast({ title: "Jar deleted", tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
@@ -358,10 +381,9 @@ function CategoriesContent({ householdId }: { householdId: string }) {
       <div className="space-y-4">
         <Card>
           <CategoryForm buttonLabel="Create jar" onSubmit={createCategory} />
-          {message ? <p className="mt-4 text-sm font-bold text-primary-dark">{message}</p> : null}
         </Card>
 
-        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-card p-1">
+        <div className="grid grid-cols-3 gap-2 rounded-2xl bg-card p-1" role="group" aria-label="Filter jars by type">
           {[
             ["all", "All"],
             ["expense", "Expense"],
@@ -371,8 +393,9 @@ function CategoriesContent({ householdId }: { householdId: string }) {
               key={value}
               type="button"
               onClick={() => setTypeFilter(value as CategoryTypeFilter)}
+              aria-pressed={typeFilter === value}
               className={classNames(
-                "rounded-xl px-4 py-3 text-sm font-black transition",
+                "rounded-xl px-4 py-3 text-sm font-black transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent",
                 typeFilter === value
                   ? "bg-accent text-primary-dark shadow-sm"
                   : "text-muted hover:bg-background"
@@ -383,7 +406,22 @@ function CategoriesContent({ householdId }: { householdId: string }) {
           ))}
         </div>
 
-        {categories.length === 0 ? (
+        {loading ? (
+          <div className="space-y-3" aria-hidden="true">
+            <Card>
+              <Skeleton className="h-5 w-40 rounded-lg" />
+              <Skeleton className="mt-2 h-4 w-28 rounded-lg" />
+            </Card>
+            <Card>
+              <Skeleton className="h-5 w-52 rounded-lg" />
+              <Skeleton className="mt-2 h-4 w-24 rounded-lg" />
+            </Card>
+            <Card>
+              <Skeleton className="h-5 w-36 rounded-lg" />
+              <Skeleton className="mt-2 h-4 w-28 rounded-lg" />
+            </Card>
+          </div>
+        ) : categories.length === 0 ? (
           <EmptyState
             title="No jars yet"
             body="Try Coffee, Groceries, Transport, Bills, or Date Night."
@@ -434,8 +472,8 @@ function CategoriesContent({ householdId }: { householdId: string }) {
                           </button>
                           <button
                             type="button"
-                            onClick={() => deleteCategory(category.id)}
-                            className="min-h-11 w-full rounded-2xl border border-border px-3 py-2 text-sm font-black text-muted sm:w-auto sm:px-4"
+                            onClick={() => setDeletingCategory(category)}
+                            className="min-h-11 w-full rounded-2xl border border-border px-3 py-2 text-sm font-black text-danger transition hover:border-danger hover:bg-danger-soft sm:w-auto sm:px-4"
                           >
                             Delete
                           </button>
@@ -457,6 +495,20 @@ function CategoriesContent({ householdId }: { householdId: string }) {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deletingCategory !== null}
+        onClose={() => {
+          if (!deleteBusy) {
+            setDeletingCategory(null);
+          }
+        }}
+        onConfirm={handleDeleteCategoryConfirm}
+        busy={deleteBusy}
+        title="Delete this jar?"
+        body={`${deletingCategory?.name || "This jar"} will be removed. Past transactions will stay in your ledger without a jar.`}
+        confirmLabel="Yes, delete jar"
+      />
     </>
   );
 }

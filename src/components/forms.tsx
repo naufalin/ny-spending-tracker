@@ -21,21 +21,26 @@ export function TypeSelect({
   onChange: (value: TransactionType) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-background p-1">
-      {(["expense", "income"] as const).map((type) => (
-        <button
-          key={type}
-          type="button"
-          onClick={() => onChange(type)}
-          className={
-            value === type
-              ? "rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark shadow-sm"
-              : "rounded-xl px-4 py-3 text-sm font-black text-muted"
-          }
-        >
-          {type === "expense" ? "Expense" : "Income"}
-        </button>
-      ))}
+    <div className="grid grid-cols-2 gap-2 rounded-2xl bg-background p-1" role="group" aria-label="Transaction type">
+      {(["expense", "income"] as const).map((type) => {
+        const isActive = value === type;
+
+        return (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onChange(type)}
+            aria-pressed={isActive}
+            className={
+              isActive
+                ? "rounded-xl bg-card px-4 py-3 text-sm font-black text-primary-dark shadow-sm transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+                : "rounded-xl px-4 py-3 text-sm font-black text-muted transition hover:text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+            }
+          >
+            {type === "expense" ? "Expense" : "Income"}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -86,7 +91,7 @@ export function CategoryForm({
           placeholder="Groceries, transport, date night"
         />
         {errors.name ? (
-          <p className="mt-1 text-sm font-bold text-primary-dark">{errors.name.message}</p>
+          <p className="mt-1 text-sm font-bold text-danger">{errors.name.message}</p>
         ) : null}
       </Field>
       <Field label="Type">

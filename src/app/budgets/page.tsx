@@ -10,19 +10,23 @@ import {
   buttonClassName,
   inputClassName,
 } from "@/components/app-shell";
-import { formatIdr, monthStart } from "@/lib/utils";
+import { MoneyInput } from "@/components/money-input";
+import { Money } from "@/components/money";
+import { useToast } from "@/components/toast";
+import { parseFormattedNumber, monthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Budget, Category } from "@/types/database";
 
 function BudgetsContent({ householdId }: { householdId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [month, setMonth] = useState(monthStart());
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+  const [amountError, setAmountError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -64,12 +68,12 @@ function BudgetsContent({ householdId }: { householdId: string }) {
   async function saveBudget(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    setMessage("");
+    setAmountError("");
 
-    const amountValue = Number(amount);
+    const amountValue = parseFormattedNumber(amount);
 
-    if (!amountValue || amountValue < 1) {
-      setMessage("Budget amount should be at least 1 IDR.");
+    if (amountValue < 1) {
+      setAmountError("Budget amount should be at least 1 IDR.");
       setSaving(false);
       return;
     }
@@ -89,12 +93,12 @@ function BudgetsContent({ householdId }: { householdId: string }) {
     setSaving(false);
 
     if (error) {
-      setMessage(error.message);
+      addToast({ title: "Couldn't save budget", body: error.message, tone: "danger" });
       return;
     }
 
     setAmount("");
-    setMessage("Budget saved.");
+    addToast({ title: "Garden plan saved", tone: "success" });
     setRefreshKey((current) => current + 1);
   }
 
@@ -135,19 +139,21 @@ function BudgetsContent({ householdId }: { householdId: string }) {
               </Field>
 
               <Field label="Amount">
-                <input
-                  required
-                  inputMode="numeric"
-                  type="number"
-                  min="1"
+                <MoneyInput
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  className={inputClassName}
-                  placeholder="1500000"
+                  onChange={(formatted) => {
+                    setAmount(formatted);
+                    if (amountError) {
+                      setAmountError("");
+                    }
+                  }}
+                  placeholder="1.500.000"
+                  required
+                  ariaInvalid={Boolean(amountError)}
                 />
               </Field>
 
-              {message ? <p className="text-sm font-bold text-primary-dark">{message}</p> : null}
+              {amountError ? <p className="text-sm font-bold text-danger">{amountError}</p> : null}
 
               <button disabled={saving || !categoryId} className={`${buttonClassName} w-full`}>
                 {saving ? "Saving..." : "Save garden plan"}
@@ -172,9 +178,7 @@ function BudgetsContent({ householdId }: { householdId: string }) {
                     </p>
                     <p className="mt-1 text-sm text-muted">{month.slice(0, 7)}</p>
                   </div>
-                  <p className="text-right font-black text-primary-dark">
-                    {formatIdr(budget.amount)}
-                  </p>
+                  <Money amount={budget.amount} className="text-right font-black" />
                 </div>
               </Card>
             ))}

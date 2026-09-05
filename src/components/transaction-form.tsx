@@ -11,8 +11,9 @@ import {
   buttonClassName,
   inputClassName,
 } from "@/components/app-shell";
+import { MoneyInput } from "@/components/money-input";
 import { TypeSelect } from "@/components/forms";
-import { formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
+import { formatAmountInput, parseFormattedNumber, todayDate } from "@/lib/utils";
 import type { Category, Channel, Transaction, TransactionType } from "@/types/database";
 import type { Subcategory } from "@/types/database";
 
@@ -72,7 +73,7 @@ export function TransactionForm({
   } = useForm<TransactionFormInput>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
-      amount: transaction ? formatNumberWithCommas(String(transaction.amount)) : "",
+      amount: transaction ? formatAmountInput(String(transaction.amount)) : "",
       type: transaction?.type || "expense",
       categoryId: transaction?.category_id || "",
       subcategoryId: transaction?.subcategory_id || null,
@@ -100,6 +101,7 @@ export function TransactionForm({
 
   const [saved, setSaved] = useState(false);
   const type = watch("type");
+  const amountValue = watch("amount");
   const filteredCategories = categories.filter((category) => category.type === type);
   const categoryId = watch("categoryId");
   const filteredSubcategories = subcategories.filter((sub) => sub.category_id === categoryId);
@@ -112,7 +114,7 @@ export function TransactionForm({
   }
 
   function setQuickAmount(value: number) {
-    setValue("amount", formatNumberWithCommas(String(value)));
+    setValue("amount", formatAmountInput(String(value)));
   }
 
   async function handleFormSubmit(data: TransactionFormInput) {
@@ -158,23 +160,15 @@ export function TransactionForm({
   return (
     <Card>
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-        <Field label="How much?">
+        <Field label="Amount">
           <div className="space-y-3">
-            <input
-              required
-              inputMode="numeric"
-              type="text"
-              {...register("amount", {
-                onChange: (event) => {
-                  const formatted = formatNumberWithCommas(event.target.value);
-                  setValue("amount", formatted);
-                },
-              })}
-              className={`${inputClassName} text-2xl font-black`}
-              placeholder="50,000"
+            <MoneyInput
+              value={amountValue || ""}
+              onChange={(formatted) => setValue("amount", formatted)}
+              ariaInvalid={Boolean(errors.amount)}
             />
             {errors.amount ? (
-              <p className="text-sm font-bold text-primary-dark">{errors.amount.message}</p>
+              <p className="text-sm font-bold text-danger">{errors.amount.message}</p>
             ) : null}
             <div className="grid grid-cols-4 gap-2">
               {[10000, 25000, 50000, 100000].map((value) => (
@@ -182,16 +176,16 @@ export function TransactionForm({
                   key={value}
                   type="button"
                   onClick={() => setQuickAmount(value)}
-                  className="rounded-xl bg-accent px-2 py-2 text-xs font-black text-primary-dark"
+                  className="rounded-xl bg-accent px-2 py-2 text-xs font-black tabular-nums text-primary-dark transition hover:bg-primary hover:text-foreground"
                 >
-                  {formatNumberWithCommas(String(value))}
+                  {formatAmountInput(String(value))}
                 </button>
               ))}
             </div>
           </div>
         </Field>
 
-        <Field label="Kind of bloom">
+        <Field label="Type">
           <Controller
             control={control}
             name="type"
@@ -201,13 +195,16 @@ export function TransactionForm({
           />
         </Field>
 
-        <Field label="Little jar">
+        <Field label="Category">
           <select
             {...register("categoryId", {
               onChange: () => setValue("subcategoryId", null),
             })}
             className={inputClassName}
           >
+            <option value="" disabled>
+              Choose a category
+            </option>
             {filteredCategories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -215,12 +212,12 @@ export function TransactionForm({
             ))}
           </select>
           {errors.categoryId ? (
-            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.categoryId.message}</p>
+            <p className="mt-1 text-sm font-bold text-danger">{errors.categoryId.message}</p>
           ) : null}
         </Field>
 
         {filteredSubcategories.length > 0 ? (
-          <Field label="Little petal">
+          <Field label="Sub-category">
             <select
               {...register("subcategoryId")}
               className={inputClassName}
@@ -235,12 +232,12 @@ export function TransactionForm({
           </Field>
         ) : null}
 
-        <Field label="Paid from">
+        <Field label="Wallet">
           <select
             {...register("channelId")}
             className={inputClassName}
           >
-            <option value="">No channel</option>
+            <option value="">No wallet</option>
             {channels.map((channel) => (
               <option key={channel.id} value={channel.id}>
                 {channel.name}
@@ -249,7 +246,7 @@ export function TransactionForm({
           </select>
         </Field>
 
-        <Field label="Tiny note">
+        <Field label="Note">
           <input
             {...register("note")}
             className={inputClassName}
@@ -257,7 +254,7 @@ export function TransactionForm({
           />
         </Field>
 
-        <Field label="When?">
+        <Field label="Date">
           <input
             required
             type="date"
@@ -265,15 +262,15 @@ export function TransactionForm({
             className={inputClassName}
           />
           {errors.spentAt ? (
-            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.spentAt.message}</p>
+            <p className="mt-1 text-sm font-bold text-danger">{errors.spentAt.message}</p>
           ) : null}
         </Field>
 
         {errors.root ? (
-          <p className="text-sm font-bold text-primary-dark">{errors.root.message}</p>
+          <p className="text-sm font-bold text-danger">{errors.root.message}</p>
         ) : null}
         {saved && successMessage ? (
-          <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
+          <p className="rounded-2xl bg-success-soft px-4 py-3 text-sm font-black text-success">
             {successMessage}
           </p>
         ) : null}

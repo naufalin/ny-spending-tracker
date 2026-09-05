@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card, buttonClassName, secondaryButtonClassName } from "@/components/app-shell";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/toast";
 import {
   googleSheetsRequest,
   type GoogleSheetsStatus,
@@ -69,9 +71,11 @@ function formatSyncTime(value: string | null) {
 }
 
 export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
+  const { addToast } = useToast();
   const [connection, setConnection] = useState<GoogleSheetsStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const [message, setMessage] = useState(() =>
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("googleSheets") === "error"
@@ -88,7 +92,6 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
 
   const openPicker = useCallback(async () => {
     setBusy(true);
-    setMessage("");
 
     try {
       const config = (await googleSheetsRequest(
@@ -117,10 +120,14 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
                 spreadsheetName: selected.name,
               }),
             });
-            setMessage("Spreadsheet connected.");
+            addToast({ title: `${selected.name} connected`, tone: "success" });
             await loadStatus();
           } catch (error) {
-            setMessage(error instanceof Error ? error.message : "Unable to save spreadsheet.");
+            addToast({
+              title: "Unable to save spreadsheet",
+              body: error instanceof Error ? error.message : undefined,
+              tone: "danger",
+            });
           } finally {
             setBusy(false);
           }
@@ -130,9 +137,13 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
       setBusy(false);
     } catch (error) {
       setBusy(false);
-      setMessage(error instanceof Error ? error.message : "Unable to open Google Picker.");
+      addToast({
+        title: "Unable to open Google Picker",
+        body: error instanceof Error ? error.message : undefined,
+        tone: "danger",
+      });
     }
-  }, [householdId, loadStatus]);
+  }, [addToast, householdId, loadStatus]);
 
   useEffect(() => {
     let isMounted = true;
@@ -178,7 +189,6 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
 
   async function connectGoogle() {
     setBusy(true);
-    setMessage("");
 
     try {
       const data = (await googleSheetsRequest(
@@ -187,26 +197,30 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
       window.location.href = data.url;
     } catch (error) {
       setBusy(false);
-      setMessage(error instanceof Error ? error.message : "Unable to start Google connection.");
+      addToast({
+        title: "Unable to start Google connection",
+        body: error instanceof Error ? error.message : undefined,
+        tone: "danger",
+      });
     }
   }
 
   async function disconnect() {
-    if (!window.confirm("Disconnect this household spreadsheet?")) {
-      return;
-    }
-
     setBusy(true);
-    setMessage("");
 
     try {
       await googleSheetsRequest(`/api/google-sheets/disconnect?householdId=${householdId}`, {
         method: "DELETE",
       });
       setConnection(null);
-      setMessage("Google Sheets disconnected.");
+      setDisconnectOpen(false);
+      addToast({ title: "Google Sheets disconnected", tone: "success" });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to disconnect.");
+      addToast({
+        title: "Unable to disconnect",
+        body: error instanceof Error ? error.message : undefined,
+        tone: "danger",
+      });
     } finally {
       setBusy(false);
     }
@@ -232,12 +246,12 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
               Last sync: <span className="font-bold text-foreground">{formatSyncTime(connection.last_sync_at)}</span>
             </p>
             {connection.last_sync_status === "error" && connection.last_sync_error ? (
-              <p className="mt-1 text-primary-dark">{connection.last_sync_error}</p>
+              <p className="mt-1 text-danger">{connection.last_sync_error}</p>
             ) : null}
           </div>
         ) : null}
 
-        {message ? <p className="text-sm font-bold text-primary-dark">{message}</p> : null}
+        {message ? <p className="text-sm font-bold text-danger">{message}</p> : null}
 
         <div className="flex gap-2">
           {!connection ? (
@@ -249,13 +263,32 @@ export function GoogleSheetsSettings({ householdId }: { householdId: string }) {
               <button type="button" disabled={busy} onClick={openPicker} className={buttonClassName}>
                 {connection.spreadsheet_id ? "Replace sheet" : "Choose sheet"}
               </button>
-              <button type="button" disabled={busy} onClick={disconnect} className={secondaryButtonClassName}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setDisconnectOpen(true)}
+                className={secondaryButtonClassName}
+              >
                 Disconnect
               </button>
             </>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={disconnectOpen}
+        onClose={() => {
+          if (!busy) {
+            setDisconnectOpen(false);
+          }
+        }}
+        onConfirm={disconnect}
+        busy={busy}
+        title="Disconnect Google Sheets?"
+        body="Exports will stop until you connect a spreadsheet again. Your ledger data is not affected."
+        confirmLabel="Disconnect"
+      />
     </Card>
   );
 }

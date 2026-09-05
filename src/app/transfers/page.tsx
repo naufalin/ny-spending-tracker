@@ -10,9 +10,14 @@ import {
   PageHeader,
   ProtectedPage,
   buttonClassName,
+  dangerButtonClassName,
   inputClassName,
   secondaryButtonClassName,
 } from "@/components/app-shell";
+import { Money } from "@/components/money";
+import { RowMenu } from "@/components/row-menu";
+import { ListSkeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { TransferForm } from "@/components/transfer-form";
 import { deleteTransfer as removeTransfer, saveTransfer } from "@/lib/transfers";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -21,12 +26,12 @@ import type { Category, Channel, Profile, Transfer } from "@/types/database";
 
 function TransfersContent({ householdId, userId }: { householdId: string; userId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [profiles, setProfiles] = useState<Record<string, Profile>>({});
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmingTransfer, setConfirmingTransfer] = useState<Transfer | null>(null);
@@ -37,6 +42,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
   const [destinationFilter, setDestinationFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
   const [noteSearch, setNoteSearch] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -70,7 +76,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
       }
 
       if (transferResult.error) {
-        setMessage(transferResult.error.message);
+        addToast({ title: "Couldn't load transfers", body: transferResult.error.message, tone: "danger" });
         setLoading(false);
         return;
       }
@@ -100,7 +106,6 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
           return acc;
         }, {})
       );
-      setMessage("");
       setLoading(false);
     }
 
@@ -109,7 +114,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
     return () => {
       isMounted = false;
     };
-  }, [householdId, refreshKey, supabase]);
+  }, [addToast, householdId, refreshKey, supabase]);
 
   const filteredTransfers = transfers.filter((transfer) => {
     if (fromDate && transfer.transferred_at < fromDate) {
@@ -179,19 +184,19 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
 
     const transfer = confirmingTransfer;
     setDeletingId(transfer.id);
-    setMessage("");
 
     const error = await removeTransfer(supabase, householdId, transfer.id);
 
     setDeletingId(null);
 
     if (error) {
-      setMessage(error);
+      addToast({ title: "Couldn't delete transfer", body: error, tone: "danger" });
       return;
     }
 
     setTransfers((current) => current.filter((item) => item.id !== transfer.id));
     setConfirmingTransfer(null);
+    addToast({ title: "Transfer deleted", tone: "success" });
   }
 
   function clearFilters() {
@@ -203,10 +208,66 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
     setNoteSearch("");
   }
 
+  const activeFilterChips: Array<{
+    key: string;
+    label: string;
+    onRemove: () => void;
+  }> = [];
+
+  if (fromDate) {
+    activeFilterChips.push({
+      key: "from",
+      label: `From: ${formatDate(fromDate)}`,
+      onRemove: () => setFromDate(""),
+    });
+  }
+
+  if (toDate) {
+    activeFilterChips.push({
+      key: "to",
+      label: `To: ${formatDate(toDate)}`,
+      onRemove: () => setToDate(""),
+    });
+  }
+
+  if (sourceFilter !== "all") {
+    activeFilterChips.push({
+      key: "source",
+      label: `From wallet: ${channels.find((channel) => channel.id === sourceFilter)?.name || "Selected"}`,
+      onRemove: () => setSourceFilter("all"),
+    });
+  }
+
+  if (destinationFilter !== "all") {
+    activeFilterChips.push({
+      key: "destination",
+      label: `To wallet: ${channels.find((channel) => channel.id === destinationFilter)?.name || "Selected"}`,
+      onRemove: () => setDestinationFilter("all"),
+    });
+  }
+
+  if (personFilter !== "all") {
+    activeFilterChips.push({
+      key: "person",
+      label: `Person: ${personFilter === userId ? "You" : profiles[personFilter]?.display_name || "Member"}`,
+      onRemove: () => setPersonFilter("all"),
+    });
+  }
+
+  if (noteSearch.trim()) {
+    activeFilterChips.push({
+      key: "note",
+      label: `Note: ${noteSearch.trim()}`,
+      onRemove: () => setNoteSearch(""),
+    });
+  }
+
+  const activeFilterCount = activeFilterChips.length;
+
   return (
     <>
       <PageHeader
-        eyebrow="Money paths"
+        eyebrow="Money moves"
         title="Transfers"
         action={
           <Link href="/transfers/new" className={`${buttonClassName} w-full sm:w-auto`}>
@@ -215,14 +276,8 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
         }
       />
 
-      {message ? (
-        <p className="mb-3 rounded-2xl bg-accent px-4 py-3 text-sm font-bold text-primary-dark">
-          {message}
-        </p>
-      ) : null}
-
       {loading ? (
-        <EmptyState title="Opening transfers" body="Gathering every move between your wallets." />
+        <ListSkeleton />
       ) : transfers.length === 0 ? (
         <EmptyState
           title="No transfers yet"
@@ -240,7 +295,24 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                 {filteredTransfers.length} shown
               </span>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((current) => !current)}
+              aria-expanded={filtersOpen}
+              aria-controls="transfer-filters"
+              className="flex min-h-12 w-full items-center justify-between rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark md:hidden"
+            >
+              <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}</span>
+              <span aria-hidden="true">{filtersOpen ? "Hide" : "Show"}</span>
+            </button>
+            <div
+              id="transfer-filters"
+              className={
+                filtersOpen
+                  ? "mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  : "mt-3 hidden grid-cols-1 gap-3 sm:grid-cols-2 md:grid"
+              }
+            >
               <Field label="From date">
                 <input
                   type="date"
@@ -312,12 +384,28 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="min-h-12 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted"
+                  className="min-h-12 w-full rounded-2xl border border-border px-4 py-3 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark"
                 >
                   Clear filters
                 </button>
               </div>
             </div>
+            {activeFilterChips.length > 0 ? (
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Active filters">
+                {activeFilterChips.map((filter) => (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={filter.onRemove}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-full bg-accent px-3 py-2 text-xs font-black text-primary-dark transition hover:bg-primary hover:text-foreground"
+                    aria-label={`Remove ${filter.label} filter`}
+                  >
+                    {filter.label}
+                    <span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </Card>
 
           <Card>
@@ -328,11 +416,11 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
               </div>
               <div className="rounded-2xl bg-background p-3">
                 <p className="text-xs font-bold text-muted">Moved</p>
-                <p className="mt-1 text-sm font-black text-secondary">{formatIdr(totalAmount)}</p>
+                <Money amount={totalAmount} className="mt-1 block text-sm font-black" />
               </div>
               <div className="rounded-2xl bg-background p-3">
                 <p className="text-xs font-bold text-muted">Fees</p>
-                <p className="mt-1 text-sm font-black text-primary-dark">{formatIdr(totalFees)}</p>
+                <Money amount={totalFees} tone="expense" className="mt-1 block text-sm font-black" />
               </div>
             </div>
           </Card>
@@ -342,9 +430,9 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
           ) : null}
 
           {filteredTransfers.map((transfer) => (
-            <Card key={transfer.id}>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
+            <Card key={transfer.id} className="p-4">
+              <div className="md:flex md:items-center md:gap-4">
+                <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-block max-w-full break-words rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
                       {transfer.from_channel?.name || "Source"} → {transfer.to_channel?.name || "Destination"}
@@ -366,24 +454,24 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                     </p>
                   ) : null}
                 </div>
-                <p className="shrink-0 text-left text-xl font-black text-secondary sm:text-right">{formatIdr(transfer.amount)}</p>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setEditingTransfer(transfer)}
-                  className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark transition hover:bg-primary-dark hover:text-white"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmingTransfer(transfer)}
-                  disabled={deletingId === transfer.id}
-                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark disabled:opacity-60"
-                >
-                  {deletingId === transfer.id ? "Deleting..." : "Delete"}
-                </button>
+                <div className="mt-3 flex items-center justify-between gap-3 md:mt-0 md:justify-end">
+                  <Money amount={transfer.amount} className="text-lg font-black" />
+                  <RowMenu
+                    label={`Actions for this transfer`}
+                    items={[
+                      { label: "Edit", onSelect: () => setEditingTransfer(transfer) },
+                      {
+                        label: deletingId === transfer.id ? "Deleting..." : "Delete",
+                        danger: true,
+                        onSelect: () => {
+                          if (deletingId !== transfer.id) {
+                            setConfirmingTransfer(transfer);
+                          }
+                        },
+                      },
+                    ]}
+                  />
+                </div>
               </div>
             </Card>
           ))}
@@ -415,6 +503,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
 
               if (!error) {
                 setRefreshKey((current) => current + 1);
+                addToast({ title: "Transfer updated", tone: "success" });
               }
 
               return error;
@@ -441,7 +530,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
               <p className="text-sm font-black text-foreground">
                 {confirmingTransfer.from_channel?.name || "Source"} → {confirmingTransfer.to_channel?.name || "Destination"}
               </p>
-              <p className="mt-1 text-sm font-black text-secondary">{formatIdr(confirmingTransfer.amount)}</p>
+              <Money amount={confirmingTransfer.amount} className="mt-1 block text-sm font-black" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -456,7 +545,7 @@ function TransfersContent({ householdId, userId }: { householdId: string; userId
                 type="button"
                 onClick={confirmDelete}
                 disabled={deletingId !== null}
-                className={`${buttonClassName} bg-primary-dark text-white hover:bg-primary-dark`}
+                className={dangerButtonClassName}
               >
                 {deletingId ? "Deleting..." : "Delete"}
               </button>

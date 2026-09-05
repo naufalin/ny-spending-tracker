@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   EmptyState,
@@ -9,9 +10,14 @@ import {
   Modal,
   ProtectedPage,
   buttonClassName,
+  dangerButtonClassName,
   inputClassName,
   secondaryButtonClassName,
 } from "@/components/app-shell";
+import { Money } from "@/components/money";
+import { RowMenu } from "@/components/row-menu";
+import { ListSkeleton } from "@/components/skeleton";
+import { useToast } from "@/components/toast";
 import { TransactionForm } from "@/components/transaction-form";
 import { formatDate, formatIdr, monthStart, nextMonthStart } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -20,13 +26,79 @@ import type { Category, Channel, Profile, Subcategory, Transaction, TransactionT
 
 const PAGE_SIZE = 25;
 const UNDO_TOAST_DURATION = 8_000;
+const SEARCH_DEBOUNCE_MS = 300;
 
 type PendingDeletion = {
   transaction: Transaction;
 };
 
+type FilterState = {
+  month: string;
+  q: string;
+  type: "all" | TransactionType;
+  category: string;
+  subcategory: string;
+  channel: string;
+  person: string;
+};
+
+const DEFAULT_FILTERS: FilterState = {
+  month: monthStart().slice(0, 7),
+  q: "",
+  type: "all",
+  category: "all",
+  subcategory: "all",
+  channel: "all",
+  person: "all",
+};
+
+function readFiltersFromSearchParams(searchParams: URLSearchParams): FilterState {
+  const type = searchParams.get("type");
+
+  return {
+    month: searchParams.get("month") ?? DEFAULT_FILTERS.month,
+    q: searchParams.get("q") ?? "",
+    type: type === "expense" || type === "income" ? type : "all",
+    category: searchParams.get("category") ?? "all",
+    subcategory: searchParams.get("subcategory") ?? "all",
+    channel: searchParams.get("channel") ?? "all",
+    person: searchParams.get("person") ?? "all",
+  };
+}
+
+function buildFilterQueryString(filters: FilterState) {
+  const params = new URLSearchParams();
+
+  if (filters.month) {
+    params.set("month", filters.month);
+  }
+  if (filters.q.trim()) {
+    params.set("q", filters.q.trim());
+  }
+  if (filters.type !== "all") {
+    params.set("type", filters.type);
+  }
+  if (filters.category !== "all") {
+    params.set("category", filters.category);
+  }
+  if (filters.subcategory !== "all") {
+    params.set("subcategory", filters.subcategory);
+  }
+  if (filters.channel !== "all") {
+    params.set("channel", filters.channel);
+  }
+  if (filters.person !== "all") {
+    params.set("person", filters.person);
+  }
+
+  return params.toString();
+}
+
 function TransactionsContent({ householdId, userId }: { householdId: string; userId: string }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { addToast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -41,19 +113,30 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [committingDeleteIds, setCommittingDeleteIds] = useState<Set<string>>(new Set());
   const [confirmingTransaction, setConfirmingTransaction] = useState<Transaction | null>(null);
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletion[]>([]);
-  const [message, setMessage] = useState("");
-  const [month, setMonth] = useState(monthStart().slice(0, 7));
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [subcategoryFilter, setSubcategoryFilter] = useState("all");
-  const [channelFilter, setChannelFilter] = useState("all");
-  const [personFilter, setPersonFilter] = useState("all");
+  const initialFilters = useMemo(() => readFiltersFromSearchParams(new URLSearchParams(searchParams.toString())), [searchParams]);
+  const [month, setMonth] = useState(initialFilters.month);
+  const [searchInput, setSearchInput] = useState(initialFilters.q);
+  const [searchQuery, setSearchQuery] = useState(initialFilters.q);
+  const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>(initialFilters.type);
+  const [categoryFilter, setCategoryFilter] = useState(initialFilters.category);
+  const [subcategoryFilter, setSubcategoryFilter] = useState(initialFilters.subcategory);
+  const [channelFilter, setChannelFilter] = useState(initialFilters.channel);
+  const [personFilter, setPersonFilter] = useState(initialFilters.person);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const deletionTimersRef = useRef(new Map<string, number>());
   const requestVersionRef = useRef(0);
   const pendingDeletionIdsRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSearchQuery(searchInput), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const queryString = buildFilterQueryString({ month, q: searchQuery, type: typeFilter, category: categoryFilter, subcategory: subcategoryFilter, channel: channelFilter, person: personFilter });
+    router.replace(queryString ? `/transactions?${queryString}` : "/transactions", { scroll: false });
+  }, [month, searchQuery, typeFilter, categoryFilter, subcategoryFilter, channelFilter, personFilter, router]);
 
   const fetchTransactionPage = useCallback(async (offset: number) => {
     let query = supabase
@@ -197,7 +280,6 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       setTransactions([]);
       setNextOffset(0);
       setTotalCount(null);
-      setMessage("");
 
       const result = await fetchTransactionPage(0);
 
@@ -206,7 +288,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       }
 
       if (result.error) {
-        setMessage(result.error.message);
+        addToast({ title: "Couldn't load transactions", body: result.error.message, tone: "danger" });
         setLoading(false);
         return;
       }
@@ -224,7 +306,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     return () => {
       isMounted = false;
     };
-  }, [fetchTransactionPage]);
+  }, [addToast, fetchTransactionPage]);
 
   const hasMore = totalCount !== null && nextOffset < totalCount;
 
@@ -271,7 +353,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     }
 
     if (result.error) {
-      setMessage(result.error.message);
+      addToast({ title: "Couldn't load more", body: result.error.message, tone: "danger" });
       setLoadingMore(false);
       return;
     }
@@ -356,7 +438,11 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
     if (error) {
       restoreTransaction(transaction);
-      setMessage(`Couldn't delete ${transaction.note || "this transaction"}: ${error.message}`);
+      addToast({
+        title: `Couldn't delete ${transaction.note || "transaction"}`,
+        body: error.message,
+        tone: "danger",
+      });
       return;
     }
 
@@ -372,10 +458,19 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     }
 
     setConfirmingTransaction(null);
-    setMessage("");
     pendingDeletionIdsRef.current.add(transaction.id);
     setPendingDeletions((current) => [...current, { transaction }]);
     setTransactions((current) => current.filter((item) => item.id !== transaction.id));
+    addToast({
+      title: "Transaction removed",
+      body: `${transaction.note || transaction.categories?.name || "Untitled"} · ${formatIdr(transaction.amount)} · ${formatDate(transaction.spent_at)}`,
+      tone: "danger",
+      durationMs: UNDO_TOAST_DURATION,
+      action: {
+        label: "Undo",
+        onClick: () => undoDelete(transaction.id),
+      },
+    });
 
     const timerId = window.setTimeout(() => {
       void commitDeferredDelete(transaction);
@@ -399,10 +494,12 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     pendingDeletionIdsRef.current.delete(transactionId);
     setPendingDeletions((current) => current.filter((item) => item.transaction.id !== transactionId));
     restoreTransaction(pendingDeletion.transaction);
+    addToast({ title: "Deletion undone", tone: "success" });
   }
 
   function clearFilters() {
     setMonth("");
+    setSearchInput("");
     setSearchQuery("");
     setTypeFilter("all");
     setCategoryFilter("all");
@@ -420,7 +517,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   if (month) {
     activeFilterChips.push({
       key: "month",
-      label: `Month: ${new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(
+      label: `Month: ${new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric" }).format(
         new Date(`${month}-01T00:00:00`)
       )}`,
       onRemove: () => setMonth(""),
@@ -431,7 +528,10 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     activeFilterChips.push({
       key: "search",
       label: `Note: ${searchQuery.trim()}`,
-      onRemove: () => setSearchQuery(""),
+      onRemove: () => {
+        setSearchInput("");
+        setSearchQuery("");
+      },
     });
   }
 
@@ -465,7 +565,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   if (channelFilter !== "all") {
     activeFilterChips.push({
       key: "channel",
-      label: `Channel: ${channels.find((channel) => channel.id === channelFilter)?.name || "Selected"}`,
+      label: `Wallet: ${channels.find((channel) => channel.id === channelFilter)?.name || "Selected"}`,
       onRemove: () => setChannelFilter("all"),
     });
   }
@@ -482,24 +582,26 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
   return (
     <>
-      <header className="mb-5 petal-rise">
-        <p className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-bold text-primary-dark">
-          <span aria-hidden="true">✿</span>
-          Spending basket
-        </p>
-        <h1 className="mt-2 break-words text-[2rem] font-black leading-tight tracking-normal text-foreground sm:text-3xl">
-          Spending basket
-        </h1>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
+      <header className="mb-5 flex flex-col gap-4 petal-rise sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <p className="inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm font-bold text-primary-dark">
+            <span aria-hidden="true">✿</span>
+            Daily blooms
+          </p>
+          <h1 className="mt-2 break-words text-[2rem] font-black leading-tight tracking-normal text-foreground sm:text-3xl">
+            Spending basket
+          </h1>
+        </div>
+        <div className="grid w-full grid-cols-2 gap-2 sm:w-auto sm:flex sm:flex-row sm:justify-end">
           <Link
             href="/transfers"
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+            className={`${secondaryButtonClassName} min-h-12 px-4 py-3 text-sm`}
           >
             Transfers
           </Link>
           <Link
             href="/transfers/new"
-            className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-4 py-3 text-sm font-black text-muted"
+            className={`${secondaryButtonClassName} min-h-12 px-4 py-3 text-sm`}
           >
             Move money
           </Link>
@@ -510,7 +612,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       </header>
 
       {loading ? (
-        <EmptyState title="Gathering spending" body="Your ledger is opening up." />
+        <ListSkeleton />
       ) : hasAnyTransactions === false ? (
         <EmptyState title="No spending yet" body="A fresh lily garden. Add your first transaction." />
       ) : (
@@ -537,8 +639,8 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
               <Field label="Search notes">
                 <input
                   type="search"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="Search notes or descriptions"
                   className={inputClassName}
                 />
@@ -614,7 +716,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   </Field>
                 );
               })()}
-              <Field label="Channel">
+              <Field label="Wallet">
                 <select
                   value={channelFilter}
                   onChange={(event) => setChannelFilter(event.target.value)}
@@ -674,63 +776,63 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
             <EmptyState title="Nothing matches" body="Try relaxing the filters a little." />
           ) : null}
 
-          {transactions.map((transaction) => (
-            <Card key={transaction.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
-                      {transaction.categories?.name || "Uncategorized"}
-                    </span>
-                    {transaction.subcategories?.name ? (
-                      <span className="rounded-full bg-accent/60 px-3 py-1 text-xs font-black text-primary-dark">
-                        {transaction.subcategories.name}
+          {transactions.map((transaction) => {
+            const isExpense = transaction.type === "expense";
+
+            return (
+              <Card key={transaction.id} className="p-4">
+                <div className="md:flex md:items-center md:gap-4">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-accent px-3 py-1 text-sm font-black text-primary-dark">
+                        {transaction.categories?.name || "Uncategorized"}
                       </span>
+                      {transaction.subcategories?.name ? (
+                        <span className="rounded-full bg-accent/60 px-3 py-1 text-xs font-black text-primary-dark">
+                          {transaction.subcategories.name}
+                        </span>
+                      ) : null}
+                      <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
+                        {transaction.channels?.name || "No wallet"}
+                      </span>
+                      <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
+                        {getCreatorShortLabel(transaction)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-muted">
+                      {formatDate(transaction.spent_at)} · {getCreatorLabel(transaction)}
+                    </p>
+                    {transaction.note ? (
+                      <p className="mt-2 text-sm leading-6 text-muted">{transaction.note}</p>
                     ) : null}
-                    <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
-                      {transaction.channels?.name || "No channel"}
-                    </span>
-                    <span className="rounded-full bg-background px-3 py-1 text-xs font-black text-muted">
-                      {getCreatorShortLabel(transaction)}
-                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-muted">
-                    {formatDate(transaction.spent_at)} · {getCreatorLabel(transaction)}
-                  </p>
-                  {transaction.note ? (
-                    <p className="mt-2 text-sm leading-6 text-muted">{transaction.note}</p>
-                  ) : null}
+                  <div className="mt-3 flex items-center justify-between gap-3 md:mt-0 md:justify-end">
+                    <Money
+                      amount={isExpense ? -transaction.amount : transaction.amount}
+                      tone={isExpense ? "expense" : "income"}
+                      signed
+                      className="text-lg font-black"
+                    />
+                    <RowMenu
+                      label={`Actions for ${transaction.note || transaction.categories?.name || "this transaction"}`}
+                      items={[
+                        { label: "Edit", onSelect: () => setEditingTransaction(transaction) },
+                        {
+                          label: committingDeleteIds.has(transaction.id) ? "Deleting..." : "Delete",
+                          danger: true,
+                          onSelect: () => {
+                            if (!committingDeleteIds.has(transaction.id)) {
+                              requestDelete(transaction);
+                            }
+                          },
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
-                <p
-                  className={
-                    transaction.type === "expense"
-                      ? "text-right font-black text-primary-dark"
-                      : "text-right font-black text-secondary"
-                  }
-                >
-                  {transaction.type === "expense" ? "-" : "+"}
-                  {formatIdr(transaction.amount)}
-                </p>
-              </div>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingTransaction(transaction)}
-                  className="rounded-2xl bg-accent px-4 py-2 text-sm font-black text-primary-dark transition hover:bg-primary-dark hover:text-white"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => requestDelete(transaction)}
-                  disabled={committingDeleteIds.has(transaction.id)}
-                  className="rounded-2xl border border-border px-4 py-2 text-sm font-black text-muted transition hover:border-primary-dark hover:text-primary-dark disabled:opacity-60"
-                >
-                  {committingDeleteIds.has(transaction.id) ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
           {hasMore ? (
             <div className="pt-1 text-center">
               <p className="mb-2 text-xs font-bold text-muted">
@@ -748,38 +850,6 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
           ) : null}
         </div>
       )}
-      {message ? (
-        <p role="alert" className="mt-3 rounded-2xl bg-accent px-4 py-3 text-sm font-bold text-primary-dark">
-          {message}
-        </p>
-      ) : null}
-      {pendingDeletions.length > 0 ? (
-        <div className="fixed inset-x-4 bottom-[calc(6rem+env(safe-area-inset-bottom))] z-40 space-y-2 md:bottom-6 md:left-auto md:right-8 md:w-96">
-          {pendingDeletions.map(({ transaction }) => (
-            <div
-              key={transaction.id}
-              role="status"
-              aria-live="polite"
-              className="flex items-center gap-3 rounded-2xl bg-foreground px-4 py-3 text-white shadow-[0_14px_34px_rgba(63,52,50,0.24)]"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-black">Transaction removed</p>
-                <p className="mt-1 break-words text-xs leading-5 text-white/75">
-                  {transaction.note || transaction.categories?.name || "Untitled transaction"} · {formatIdr(transaction.amount)} · {formatDate(transaction.spent_at)}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => undoDelete(transaction.id)}
-                disabled={committingDeleteIds.has(transaction.id)}
-                className="min-h-11 shrink-0 rounded-xl bg-primary px-3 py-2 text-sm font-black text-foreground transition hover:bg-white disabled:opacity-60"
-              >
-                {committingDeleteIds.has(transaction.id) ? "Deleting..." : "Undo"}
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <Modal
         open={editingTransaction !== null}
         onClose={() => setEditingTransaction(null)}
@@ -832,6 +902,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                     : txn
                 )
               );
+              addToast({ title: "Transaction updated", tone: "success" });
               return null;
             }}
           />
@@ -857,16 +928,16 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                     {confirmingTransaction.categories?.name || "Uncategorized"} · {formatDate(confirmingTransaction.spent_at)}
                   </p>
                 </div>
-                <p
-                  className={
+                <Money
+                  amount={
                     confirmingTransaction.type === "expense"
-                      ? "shrink-0 text-right font-black text-primary-dark"
-                      : "shrink-0 text-right font-black text-secondary"
+                      ? -confirmingTransaction.amount
+                      : confirmingTransaction.amount
                   }
-                >
-                  {confirmingTransaction.type === "expense" ? "-" : "+"}
-                  {formatIdr(confirmingTransaction.amount)}
-                </p>
+                  tone={confirmingTransaction.type === "expense" ? "expense" : "income"}
+                  signed
+                  className="shrink-0 font-black"
+                />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -879,11 +950,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
               >
                 Keep it
               </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className={`${buttonClassName} bg-primary-dark text-white hover:bg-primary-dark`}
-              >
+              <button type="button" onClick={confirmDelete} className={dangerButtonClassName}>
                 Delete
               </button>
             </div>
@@ -896,10 +963,12 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
 export default function TransactionsPage() {
   return (
-    <ProtectedPage>
-      {({ context }) => (
-        <TransactionsContent householdId={context.householdId} userId={context.user.id} />
-      )}
-    </ProtectedPage>
+    <Suspense fallback={null}>
+      <ProtectedPage>
+        {({ context }) => (
+          <TransactionsContent householdId={context.householdId} userId={context.user.id} />
+        )}
+      </ProtectedPage>
+    </Suspense>
   );
 }

@@ -16,6 +16,18 @@ export function formatNumberWithCommas(value: string) {
   return new Intl.NumberFormat("en-US").format(Number(digits));
 }
 
+// Amounts are displayed with Indonesian separators (Rp 50.000), so inputs are
+// formatted the same way while accepting pasted values in either convention.
+export function formatAmountInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+
+  if (!digits) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("id-ID").format(Number(digits));
+}
+
 export function parseFormattedNumber(value: string) {
   return Number(value.replace(/\D/g, ""));
 }

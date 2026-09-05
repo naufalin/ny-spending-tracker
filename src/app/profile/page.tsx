@@ -10,6 +10,8 @@ import {
   inputClassName,
 } from "@/components/app-shell";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/toast";
 import { GoogleSheetsSettings } from "@/components/google-sheets-settings";
 import type { Channel, Profile } from "@/types/database";
 
@@ -25,11 +27,12 @@ function ProfileContent({
   email: string;
 }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
+  const { addToast } = useToast();
   const [displayName, setDisplayName] = useState(name);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [defaultChannelId, setDefaultChannelId] = useState("");
-  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,7 +67,6 @@ function ProfileContent({
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
-    setMessage("");
 
     const { error: authError } = await supabase.auth.updateUser({
       data: {
@@ -75,7 +77,7 @@ function ProfileContent({
 
     if (authError) {
       setSaving(false);
-      setMessage(authError.message);
+      addToast({ title: "Couldn't save profile", body: authError.message, tone: "danger" });
       return;
     }
 
@@ -87,7 +89,13 @@ function ProfileContent({
     });
 
     setSaving(false);
-    setMessage(profileError ? profileError.message : "Profile saved. Your greeting is ready.");
+
+    if (profileError) {
+      addToast({ title: "Couldn't save profile", body: profileError.message, tone: "danger" });
+      return;
+    }
+
+    addToast({ title: "Profile saved", body: "Your greeting is ready.", tone: "success" });
   }
 
   async function signOut() {
@@ -132,8 +140,6 @@ function ProfileContent({
               <p className="mt-1 text-sm text-muted">{email}</p>
             </div>
 
-            {message ? <p className="text-sm font-bold text-primary-dark">{message}</p> : null}
-
             <button disabled={saving} className={`${buttonClassName} w-full`}>
               {saving ? "Saving..." : "Save profile"}
             </button>
@@ -144,12 +150,21 @@ function ProfileContent({
 
         <button
           type="button"
-          onClick={signOut}
-          className="w-full rounded-2xl border border-border bg-card px-5 py-3 text-sm font-black text-muted"
+          onClick={() => setSignOutOpen(true)}
+          className="w-full rounded-2xl border border-border bg-card px-5 py-3 text-sm font-black text-danger transition hover:border-danger hover:bg-danger-soft"
         >
           Leave the garden
         </button>
       </div>
+
+      <ConfirmDialog
+        open={signOutOpen}
+        onClose={() => setSignOutOpen(false)}
+        onConfirm={signOut}
+        title="Leave the garden?"
+        body="You will be signed out of this device. Your ledger stays safe and waits for you."
+        confirmLabel="Sign out"
+      />
     </>
   );
 }

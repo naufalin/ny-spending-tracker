@@ -10,6 +10,18 @@
   --accent: #f6d6de;
   --muted: #8a7772;
   --border: #f2dde3;
+  --danger: #b8453d;
+  --danger-soft: #f8e0da;
+  --success: #5f8457;
+  --success-soft: #eaf3e4;
+  --warning: #b97f24;
+  --warning-soft: #f7ecd6;
+  --chart-1: #d96f91;
+  --chart-2: #a8c7a1;
+  --chart-3: #f0b45f;
+  --chart-4: #a8b6e8;
+  --chart-5: #c99ad8;
+  --chart-6: #8dc7bc;
 }
 
 @theme inline {
@@ -22,7 +34,13 @@
   --color-accent: var(--accent);
   --color-muted: var(--muted);
   --color-border: var(--border);
-  --font-sans: ui-rounded, "SF Pro Rounded", "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --font-sans: var(--font-nunito), ui-rounded, "SF Pro Rounded", "Nunito", ui-sans-serif, system-ui, sans-serif;
 }
 
 * {
@@ -35,7 +53,7 @@ html {
 }
 
 body {
-  font-family: ui-rounded, "SF Pro Rounded", "Nunito", ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-nunito), ui-rounded, "SF Pro Rounded", "Nunito", ui-sans-serif, system-ui, sans-serif;
   margin: 0;
   overscroll-behavior-y: none;
 }

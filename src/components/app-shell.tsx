@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { ToastProvider } from "@/components/toast";
 import { classNames } from "@/lib/utils";
 
 type AppShellProps = {
@@ -22,7 +23,7 @@ type ProtectedPageProps = {
   context: HouseholdContext;
 };
 
-type NavIconName = "garden" | "spend" | "move" | "jars" | "wallets" | "more";
+type NavIconName = "garden" | "spend" | "move" | "jars" | "wallets" | "budgets" | "more";
 
 type NavItem = {
   href: string;
@@ -87,6 +88,7 @@ const navItems: NavItem[] = [
   { href: "/dashboard", label: "Garden", icon: "garden" },
   { href: "/transactions", label: "Spend", icon: "spend" },
   { href: "/transfers", label: "Move", icon: "move" },
+  { href: "/budgets", label: "Budgets", icon: "budgets" },
   { href: "/categories", label: "Jars", icon: "jars" },
   { href: "/channels", label: "Wallets", icon: "wallets" },
 ];
@@ -107,6 +109,12 @@ const actionItems: ActionItem[] = [
 ];
 
 const moreItems: ActionItem[] = [
+  {
+    href: "/budgets",
+    label: "Budgets",
+    description: "Plan monthly spending limits",
+    icon: "budgets",
+  },
   {
     href: "/categories",
     label: "Jars",
@@ -168,6 +176,12 @@ function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconName; className
           <path d="M4.5 7.5h14a1.5 1.5 0 0 1 1.5 1.5v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h11" />
           <path d="M3 8h15.5a1.5 1.5 0 0 1 1.5 1.5V13h-5a2 2 0 0 1 0-4h5" />
           <path d="M15.5 11h.01" />
+        </>
+      ) : null}
+      {name === "budgets" ? (
+        <>
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="3.5" />
         </>
       ) : null}
       {name === "more" ? <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="2.8" /> : null}
@@ -321,7 +335,8 @@ export function AppShell({ children, user }: AppShellProps) {
   }, [openMenu]);
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <ToastProvider>
+      <div className="relative min-h-screen bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
         <div className="absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
@@ -360,12 +375,6 @@ export function AppShell({ children, user }: AppShellProps) {
                 <AppNavLink key={item.href} item={item} pathname={pathname} desktop collapsed={sidebarCollapsed} />
               ))}
             </nav>
-            <div className={classNames("mt-auto space-y-2", sidebarCollapsed ? "pt-6" : "pt-8")}>
-              <p className={classNames("px-1 text-[10px] font-black uppercase tracking-[0.14em] text-muted", sidebarCollapsed && "sr-only")}>Quick add</p>
-              {actionItems.map((action) => (
-                <ActionLink key={action.href} action={action} compact collapsed={sidebarCollapsed} />
-              ))}
-            </div>
           </aside>
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -463,7 +472,8 @@ export function AppShell({ children, user }: AppShellProps) {
           </>
         ) : null}
       </div>
-    </div>
+      </div>
+    </ToastProvider>
   );
 }
 
@@ -661,6 +671,9 @@ export const buttonClassName =
 export const secondaryButtonClassName =
   "inline-flex min-h-12 items-center justify-center rounded-2xl border border-border bg-card px-5 py-3 text-center text-sm font-black text-foreground transition hover:bg-accent";
 
+export const dangerButtonClassName =
+  "inline-flex min-h-12 items-center justify-center rounded-2xl bg-danger px-5 py-3 text-center text-sm font-black text-white shadow-[0_8px_20px_rgba(184,69,61,0.24)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-danger-soft";
+
 export function Modal({
   open,
   onClose,
@@ -673,6 +686,7 @@ export function Modal({
   children: React.ReactNode;
 }) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -684,7 +698,33 @@ export function Modal({
     const previousActiveElement = document.activeElement as HTMLElement | null;
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCloseRef.current();
+      if (event.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) {
+        return;
+      }
+
+      const focusableElements = dialogRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
     }
 
     const previousOverflow = document.body.style.overflow;
@@ -708,6 +748,7 @@ export function Modal({
         onClick={onClose}
       />
       <div
+        ref={dialogRef}
         className="relative z-10 flex max-h-[90vh] w-full max-w-md flex-col rounded-t-3xl bg-card shadow-[0_-12px_40px_rgba(217,111,145,0.24)] sm:mb-4 sm:rounded-3xl"
         role="dialog"
         aria-modal="true"
@@ -719,7 +760,7 @@ export function Modal({
             type="button"
             onClick={onClose}
             ref={closeButtonRef}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-accent hover:text-primary-dark"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-accent hover:text-primary-dark focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
             aria-label="Close"
           >
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-5 w-5">

@@ -11,7 +11,8 @@ import {
   buttonClassName,
   inputClassName,
 } from "@/components/app-shell";
-import { formatIdr, formatNumberWithCommas, parseFormattedNumber, todayDate } from "@/lib/utils";
+import { MoneyInput } from "@/components/money-input";
+import { formatIdr, formatAmountInput, parseFormattedNumber, todayDate } from "@/lib/utils";
 import type { Category, Channel, Transfer, TransferInput } from "@/types/database";
 
 const transferSchema = z
@@ -54,10 +55,10 @@ export function TransferForm({
 }) {
   const defaultValues = useMemo<TransferFormInput>(
     () => ({
-      amount: transfer ? formatNumberWithCommas(String(transfer.amount)) : "",
+      amount: transfer ? formatAmountInput(String(transfer.amount)) : "",
       fromChannelId: transfer?.from_channel_id || channels[0]?.id || "",
       toChannelId: transfer?.to_channel_id || channels[1]?.id || "",
-      feeAmount: transfer?.fee_amount ? formatNumberWithCommas(String(transfer.fee_amount)) : "",
+      feeAmount: transfer?.fee_amount ? formatAmountInput(String(transfer.fee_amount)) : "",
       feeCategoryId: transfer?.fee_category_id || "",
       note: transfer?.note || "",
       transferredAt: transfer?.transferred_at || todayDate(),
@@ -133,29 +134,22 @@ export function TransferForm({
   return (
     <Card>
       <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
-        <div className="rounded-3xl bg-[linear-gradient(145deg,#FFFFFF,#FFF9F2)] p-4">
+        <div className="rounded-3xl bg-[linear-gradient(145deg,var(--card),var(--background))] p-4">
           <p className="text-sm font-black text-primary-dark">Move money between wallets</p>
           <p className="mt-1 text-sm leading-6 text-muted">
             This keeps the money in your household total. Only an optional fee counts as spending.
           </p>
         </div>
 
-        <Field label="How much?">
-          <input
-            required
-            inputMode="numeric"
-            type="text"
-            {...register("amount", {
-              onChange: (event) => {
-                setValue("amount", formatNumberWithCommas(event.target.value));
-              },
-            })}
-            className={`${inputClassName} text-2xl font-black`}
-            placeholder="500,000"
-            aria-label="Transfer amount"
+        <Field label="Amount">
+          <MoneyInput
+            value={watchedAmount || ""}
+            onChange={(formatted) => setValue("amount", formatted)}
+            placeholder="500.000"
+            ariaInvalid={Boolean(errors.amount)}
           />
           {errors.amount ? (
-            <p className="mt-1 text-sm font-bold text-primary-dark">{errors.amount.message}</p>
+            <p className="mt-1 text-sm font-bold text-danger">{errors.amount.message}</p>
           ) : null}
         </Field>
 
@@ -185,7 +179,7 @@ export function TransferForm({
                 ))}
               </select>
               {errors.toChannelId ? (
-                <p className="mt-1 text-sm font-bold text-primary-dark">{errors.toChannelId.message}</p>
+                <p className="mt-1 text-sm font-bold text-danger">{errors.toChannelId.message}</p>
               ) : null}
             </Field>
           </div>
@@ -213,15 +207,9 @@ export function TransferForm({
           </div>
           <div className="mt-4 space-y-4">
             <Field label="Fee amount">
-              <input
-                inputMode="numeric"
-                type="text"
-                {...register("feeAmount", {
-                  onChange: (event) => {
-                    setValue("feeAmount", formatNumberWithCommas(event.target.value));
-                  },
-                })}
-                className={inputClassName}
+              <MoneyInput
+                value={watchedFeeAmount || ""}
+                onChange={(formatted) => setValue("feeAmount", formatted)}
                 placeholder="0"
               />
             </Field>
@@ -253,7 +241,7 @@ export function TransferForm({
               </p>
             </div>
             {sourceOutflow > (channelBalances[selectedFromChannelId] || 0) ? (
-              <p className="mt-3 rounded-2xl bg-card/80 px-3 py-2 text-xs font-bold leading-5 text-primary-dark">
+              <p className="mt-3 rounded-2xl bg-warning-soft px-3 py-2 text-xs font-bold leading-5 text-warning">
                 This move is higher than the current recorded balance. You can still save it for cash or offline adjustments.
               </p>
             ) : null}
@@ -269,7 +257,7 @@ export function TransferForm({
             />
           </Field>
 
-          <Field label="When?">
+          <Field label="Date">
             <input
               required
               type="date"
@@ -277,7 +265,7 @@ export function TransferForm({
               className={inputClassName}
             />
             {errors.transferredAt ? (
-              <p className="mt-1 text-sm font-bold text-primary-dark">{errors.transferredAt.message}</p>
+              <p className="mt-1 text-sm font-bold text-danger">{errors.transferredAt.message}</p>
             ) : null}
           </Field>
         </div>
@@ -290,10 +278,10 @@ export function TransferForm({
         ) : null}
 
         {errors.root ? (
-          <p className="text-sm font-bold text-primary-dark">{errors.root.message}</p>
+          <p className="text-sm font-bold text-danger">{errors.root.message}</p>
         ) : null}
         {saved && successMessage ? (
-          <p className="rounded-2xl bg-accent px-4 py-3 text-sm font-black text-primary-dark">
+          <p className="rounded-2xl bg-success-soft px-4 py-3 text-sm font-black text-success">
             {successMessage}
           </p>
         ) : null}

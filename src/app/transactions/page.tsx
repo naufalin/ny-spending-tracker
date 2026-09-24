@@ -34,6 +34,7 @@ type PendingDeletion = {
 
 type FilterState = {
   month: string;
+  throughDay: string;
   q: string;
   type: "all" | TransactionType;
   category: string;
@@ -44,6 +45,7 @@ type FilterState = {
 
 const DEFAULT_FILTERS: FilterState = {
   month: monthStart().slice(0, 7),
+  throughDay: "",
   q: "",
   type: "all",
   category: "all",
@@ -54,9 +56,11 @@ const DEFAULT_FILTERS: FilterState = {
 
 function readFiltersFromSearchParams(searchParams: URLSearchParams): FilterState {
   const type = searchParams.get("type");
+  const throughDay = searchParams.get("through_day") ?? "";
 
   return {
     month: searchParams.get("month") ?? DEFAULT_FILTERS.month,
+    throughDay: /^(?:[1-9]|[12]\d|3[01])$/.test(throughDay) ? throughDay : "",
     q: searchParams.get("q") ?? "",
     type: type === "expense" || type === "income" ? type : "all",
     category: searchParams.get("category") ?? "all",
@@ -71,6 +75,7 @@ function buildFilterQueryString(filters: FilterState) {
 
   if (filters.month) {
     params.set("month", filters.month);
+    if (filters.throughDay) params.set("through_day", filters.throughDay);
   }
   if (filters.q.trim()) {
     params.set("q", filters.q.trim());
@@ -115,6 +120,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   const [pendingDeletions, setPendingDeletions] = useState<PendingDeletion[]>([]);
   const initialFilters = useMemo(() => readFiltersFromSearchParams(new URLSearchParams(searchParams.toString())), [searchParams]);
   const [month, setMonth] = useState(initialFilters.month);
+  const [throughDay, setThroughDay] = useState(initialFilters.throughDay);
   const [searchInput, setSearchInput] = useState(initialFilters.q);
   const [searchQuery, setSearchQuery] = useState(initialFilters.q);
   const [typeFilter, setTypeFilter] = useState<"all" | TransactionType>(initialFilters.type);
@@ -134,9 +140,9 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   }, [searchInput]);
 
   useEffect(() => {
-    const queryString = buildFilterQueryString({ month, q: searchQuery, type: typeFilter, category: categoryFilter, subcategory: subcategoryFilter, channel: channelFilter, person: personFilter });
+    const queryString = buildFilterQueryString({ month, throughDay, q: searchQuery, type: typeFilter, category: categoryFilter, subcategory: subcategoryFilter, channel: channelFilter, person: personFilter });
     router.replace(queryString ? `/transactions?${queryString}` : "/transactions", { scroll: false });
-  }, [month, searchQuery, typeFilter, categoryFilter, subcategoryFilter, channelFilter, personFilter, router]);
+  }, [month, throughDay, searchQuery, typeFilter, categoryFilter, subcategoryFilter, channelFilter, personFilter, router]);
 
   const fetchTransactionPage = useCallback(async (offset: number) => {
     let query = supabase
@@ -149,6 +155,10 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     if (month) {
       const monthDate = new Date(`${month}-01T00:00:00`);
       query = query.gte("spent_at", `${month}-01`).lt("spent_at", nextMonthStart(monthDate));
+      if (throughDay) {
+        const lastDay = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+        query = query.lte("spent_at", `${month}-${String(Math.min(Number(throughDay), lastDay)).padStart(2, "0")}`);
+      }
     }
 
     if (searchQuery.trim()) {
@@ -160,7 +170,9 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       query = query.eq("type", typeFilter);
     }
 
-    if (categoryFilter !== "all") {
+    if (categoryFilter === "uncategorized") {
+      query = query.is("category_id", null);
+    } else if (categoryFilter !== "all") {
       query = query.eq("category_id", categoryFilter);
     }
 
@@ -203,7 +215,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
         return acc;
       }, {}),
     };
-  }, [categoryFilter, channelFilter, householdId, month, personFilter, searchQuery, subcategoryFilter, supabase, typeFilter]);
+  }, [categoryFilter, channelFilter, householdId, month, throughDay, personFilter, searchQuery, subcategoryFilter, supabase, typeFilter]);
 
   useEffect(() => {
     let isMounted = true;
@@ -373,6 +385,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
     if (month && !transaction.spent_at.startsWith(month)) {
       return false;
     }
+    if (month && throughDay && Number(transaction.spent_at.slice(8, 10)) > Number(throughDay)) return false;
 
     if (searchQuery.trim() && !(transaction.note || "").toLowerCase().includes(searchQuery.trim().toLowerCase())) {
       return false;
@@ -382,7 +395,8 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       return false;
     }
 
-    if (categoryFilter !== "all" && transaction.category_id !== categoryFilter) {
+    if (categoryFilter === "uncategorized" && transaction.category_id !== null) return false;
+    if (categoryFilter !== "all" && categoryFilter !== "uncategorized" && transaction.category_id !== categoryFilter) {
       return false;
     }
 
@@ -499,6 +513,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
 
   function clearFilters() {
     setMonth("");
+    setThroughDay("");
     setSearchInput("");
     setSearchQuery("");
     setTypeFilter("all");
@@ -520,9 +535,14 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       label: `Month: ${new Intl.DateTimeFormat("id-ID", { month: "short", year: "numeric" }).format(
         new Date(`${month}-01T00:00:00`)
       )}`,
-      onRemove: () => setMonth(""),
+      onRemove: () => { setMonth(""); setThroughDay(""); },
     });
   }
+  if (month && throughDay) activeFilterChips.push({
+    key: "throughDay",
+    label: `Days 1–${throughDay}`,
+    onRemove: () => setThroughDay(""),
+  });
 
   if (searchQuery.trim()) {
     activeFilterChips.push({
@@ -546,7 +566,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
   if (categoryFilter !== "all") {
     activeFilterChips.push({
       key: "category",
-      label: `Category: ${categories.find((category) => category.id === categoryFilter)?.name || "Selected"}`,
+      label: `Category: ${categoryFilter === "uncategorized" ? "Uncategorized" : categories.find((category) => category.id === categoryFilter)?.name || "Selected"}`,
       onRemove: () => {
         setCategoryFilter("all");
         setSubcategoryFilter("all");
@@ -632,7 +652,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                 <input
                   type="month"
                   value={month}
-                  onChange={(event) => setMonth(event.target.value)}
+                  onChange={(event) => { setMonth(event.target.value); setThroughDay(""); }}
                   className={inputClassName}
                 />
               </Field>
@@ -685,6 +705,7 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
                   className={inputClassName}
                 >
                   <option value="all">All</option>
+                  <option value="uncategorized">Uncategorized</option>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}

@@ -23,7 +23,7 @@ type ProtectedPageProps = {
   context: HouseholdContext;
 };
 
-type NavIconName = "garden" | "spend" | "move" | "jars" | "wallets" | "budgets" | "more";
+type NavIconName = "garden" | "spend" | "trends" | "move" | "jars" | "wallets" | "budgets" | "more";
 
 type NavItem = {
   href: string;
@@ -87,6 +87,7 @@ function setSidebarCollapsedPreference(collapsed: boolean) {
 const navItems: NavItem[] = [
   { href: "/dashboard", label: "Garden", icon: "garden" },
   { href: "/transactions", label: "Spend", icon: "spend" },
+  { href: "/trends", label: "Trends", icon: "trends" },
   { href: "/transfers", label: "Move", icon: "move" },
   { href: "/budgets", label: "Budgets", icon: "budgets" },
   { href: "/categories", label: "Jars", icon: "jars" },
@@ -109,6 +110,12 @@ const actionItems: ActionItem[] = [
 ];
 
 const moreItems: ActionItem[] = [
+  {
+    href: "/transfers",
+    label: "Move",
+    description: "See transfers between wallets",
+    icon: "move",
+  },
   {
     href: "/budgets",
     label: "Budgets",
@@ -154,6 +161,12 @@ function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconName; className
           <path d="M5 10h14l-1.2 9H6.2L5 10Z" />
           <path d="M8 10a4 4 0 0 1 8 0" />
           <path d="M9 14h.01M12 14h.01M15 14h.01" />
+        </>
+      ) : null}
+      {name === "trends" ? (
+        <>
+          <path d="M4 19h16" />
+          <path d="M6 16v-5h3v5M11 16V7h3v9M16 16V4h3v12" />
         </>
       ) : null}
       {name === "move" ? (

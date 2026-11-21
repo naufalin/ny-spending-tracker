@@ -14,7 +14,7 @@ import { classNames, formatDate, formatIdr, monthStart, nextMonthStart, todayDat
 import { Money } from "@/components/money";
 import { Skeleton } from "@/components/skeleton";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import type { Budget, Category, Channel, Transaction, Transfer } from "@/types/database";
+import type { Budget, Category, Channel, Transaction } from "@/types/database";
 import type { Subcategory } from "@/types/database";
 
 type CategoryTotal = {
@@ -28,9 +28,7 @@ type CategoryChartSlice = CategoryTotal & {
   percent: number;
 };
 
-type BalanceTransaction = Pick<Transaction, "channel_id" | "type" | "amount">;
-
-type BalanceTransfer = Pick<Transfer, "from_channel_id" | "to_channel_id" | "amount">;
+type WalletBalanceRow = { channel_id: string; balance: number };
 
 const categoryChartColors = [
   "var(--chart-1)",
@@ -130,8 +128,8 @@ function CategoryDonutChart({
 function DashboardContent({ householdId, user }: { householdId: string; user: User }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [balanceTransactions, setBalanceTransactions] = useState<BalanceTransaction[]>([]);
-  const [balanceTransfers, setBalanceTransfers] = useState<BalanceTransfer[]>([]);
+  const [walletBalanceRows, setWalletBalanceRows] = useState<WalletBalanceRow[]>([]);
+  const [walletBalancesFailed, setWalletBalancesFailed] = useState(false);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -167,8 +165,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     async function loadDashboard() {
       const [
         transactionResult,
-        balanceTransactionResult,
-        transferResult,
+        walletBalanceResult,
         budgetResult,
         categoryResult,
         channelResult,
@@ -181,14 +178,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
           .gte("spent_at", monthStart())
           .lt("spent_at", nextMonthStart())
           .order("spent_at", { ascending: false }),
-        supabase
-          .from("transactions")
-          .select("channel_id, type, amount")
-          .eq("household_id", householdId),
-        supabase
-          .from("transfers")
-          .select("from_channel_id, to_channel_id, amount")
-          .eq("household_id", householdId),
+        supabase.rpc("wallet_balances", { p_household_id: householdId }),
         supabase
           .from("budgets")
           .select("*, categories(id, name, type)")
@@ -201,8 +191,8 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
 
       if (isMounted) {
         setTransactions((transactionResult.data || []) as Transaction[]);
-        setBalanceTransactions((balanceTransactionResult.data || []) as BalanceTransaction[]);
-        setBalanceTransfers((transferResult.data || []) as BalanceTransfer[]);
+        setWalletBalanceRows((walletBalanceResult.data || []) as WalletBalanceRow[]);
+        setWalletBalancesFailed(Boolean(walletBalanceResult.error || channelResult.error));
         setBudgets((budgetResult.data || []) as Budget[]);
         setCategories((categoryResult.data || []) as Category[]);
         setChannels((channelResult.data || []) as Channel[]);
@@ -307,30 +297,12 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 4);
 
-  const walletBalances = channels.map((channel) => {
-    const transactionTotal = balanceTransactions
-      .filter((transaction) => transaction.channel_id === channel.id)
-      .reduce((sum, transaction) => {
-        return sum + (transaction.type === "income" ? transaction.amount : -transaction.amount);
-      }, 0);
-    const transferTotal = balanceTransfers.reduce((sum, transfer) => {
-      if (transfer.from_channel_id === channel.id) {
-        return sum - transfer.amount;
-      }
-
-      if (transfer.to_channel_id === channel.id) {
-        return sum + transfer.amount;
-      }
-
-      return sum;
-    }, 0);
-
-    return {
-      id: channel.id,
-      name: channel.name,
-      amount: transactionTotal + transferTotal,
-    };
-  });
+  const balanceByChannel = new Map(walletBalanceRows.map((row) => [row.channel_id, row.balance]));
+  const walletBalances = channels.map((channel) => ({
+    id: channel.id,
+    name: channel.name,
+    amount: balanceByChannel.get(channel.id) ?? 0,
+  }));
   const totalBalance = walletBalances.reduce((sum, wallet) => sum + wallet.amount, 0);
 
   const totalBudget = budgets.reduce((sum, budget) => sum + budget.amount, 0);
@@ -641,7 +613,15 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             </div>
           </div>
           <div className="min-h-[2.25rem] text-3xl font-black text-foreground">
-            {loading ? <Skeleton className="h-9 w-40 rounded-2xl" /> : formatDashboardMoney(totalBalance)}
+            {loading ? (
+              <Skeleton className="h-9 w-40 rounded-2xl" />
+            ) : walletBalancesFailed ? (
+              <p role="alert" className="text-sm text-muted">
+                Could not load wallet balances.
+              </p>
+            ) : (
+              formatDashboardMoney(totalBalance)
+            )}
           </div>
           {loading ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -650,7 +630,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               <Skeleton className="h-5 w-3/4 rounded-lg" />
               <Skeleton className="h-5 w-3/4 rounded-lg" />
             </div>
-          ) : walletBalances.length ? (
+          ) : walletBalancesFailed ? null : walletBalances.length ? (
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {walletBalances.map((wallet) => (
                 <div key={wallet.id} className="flex items-center justify-between gap-3">

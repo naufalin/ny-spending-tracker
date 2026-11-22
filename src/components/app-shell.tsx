@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { ToastProvider } from "@/components/toast";
 import { classNames } from "@/lib/utils";
 
 type AppShellProps = {
@@ -348,8 +347,7 @@ export function AppShell({ children, user }: AppShellProps) {
   }, [openMenu]);
 
   return (
-    <ToastProvider>
-      <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen bg-background">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -left-14 top-20 h-40 w-40 rounded-full bg-accent/45 blur-3xl" />
         <div className="absolute -right-16 top-80 h-44 w-44 rounded-full bg-secondary/25 blur-3xl" />
@@ -414,18 +412,19 @@ export function AppShell({ children, user }: AppShellProps) {
             ) : null}
             <nav className="safe-bottom fixed inset-x-0 bottom-0 z-40 px-2 pt-1 md:hidden" aria-label="Primary navigation">
               <div className="relative mx-auto max-w-md rounded-[1.75rem] border border-border/90 bg-card/95 px-2 py-2 shadow-[0_-12px_34px_rgba(217,111,145,0.16)] backdrop-blur">
-                {quickActionsOpen ? (
-                  <div
-                    className="absolute bottom-[calc(100%+0.75rem)] left-1/2 z-50 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-3xl border border-border bg-card p-3 shadow-[0_16px_40px_rgba(63,52,50,0.18)]"
-                    role="menu"
-                    aria-label="Quick actions"
-                  >
-                    <p className="px-3 pb-2 text-xs font-black uppercase tracking-[0.12em] text-muted">Quick actions</p>
-                    {actionItems.map((action) => (
-                      <ActionLink key={action.href} action={action} onClick={() => setOpenMenu(null)} />
-                    ))}
-                  </div>
-                ) : null}
+                <div
+                  className="quick-actions absolute bottom-[calc(100%+0.75rem)] left-1/2 z-50 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-3xl border border-border bg-card p-3 shadow-[0_16px_40px_rgba(63,52,50,0.18)]"
+                  id="mobile-quick-actions"
+                  role="menu"
+                  aria-label="Quick actions"
+                  data-open={quickActionsOpen}
+                  inert={!quickActionsOpen}
+                >
+                  <p className="px-3 pb-2 text-xs font-black uppercase tracking-[0.12em] text-muted">Quick actions</p>
+                  {actionItems.map((action) => (
+                    <ActionLink key={action.href} action={action} onClick={() => setOpenMenu(null)} />
+                  ))}
+                </div>
                 {moreMenuOpen ? (
                   <div
                     className="absolute bottom-[calc(100%+0.75rem)] left-1/2 z-50 w-[min(20rem,calc(100vw-2rem))] -translate-x-1/2 rounded-3xl border border-border bg-card p-3 shadow-[0_16px_40px_rgba(63,52,50,0.18)]"
@@ -450,6 +449,7 @@ export function AppShell({ children, user }: AppShellProps) {
                     )}
                     aria-label="Open quick actions"
                     aria-expanded={quickActionsOpen}
+                    aria-controls="mobile-quick-actions"
                     aria-haspopup="menu"
                   >
                     <span
@@ -485,8 +485,7 @@ export function AppShell({ children, user }: AppShellProps) {
           </>
         ) : null}
       </div>
-      </div>
-    </ToastProvider>
+    </div>
   );
 }
 
@@ -648,14 +647,23 @@ export function Card({
   );
 }
 
-export function EmptyState({ title, body }: { title: string; body: string }) {
+export function EmptyState({
+  title,
+  body,
+  action,
+}: {
+  title: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
   return (
     <Card className="text-center">
-      <div className="soft-bloom mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl">
+      <div aria-hidden="true" className="garden-pop mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl">
         🌸
       </div>
       <h2 className="text-lg font-black text-foreground">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
+      {action ? <div className="mt-4">{action}</div> : null}
     </Card>
   );
 }

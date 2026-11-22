@@ -251,7 +251,14 @@ function TrendsContent({ householdId }: { householdId: string }) {
                     />
                   </span>
                   <span className="mt-2 text-xs font-black text-foreground">{month.label}</span>
-                  {selectedMonths.includes(month.key) ? <span className="text-[10px] font-black uppercase tracking-wide text-primary-dark"><span className="sm:hidden" aria-hidden="true">✓</span><span className="hidden sm:inline" aria-hidden="true">✓ Selected</span></span> : null}
+                  <span className="mt-1 flex h-4 items-center justify-center gap-1" aria-hidden="true">
+                    {selectedMonths.includes(month.key) ? (
+                      <>
+                        <span className="garden-pop grid size-4 place-items-center rounded-tl-full rounded-tr-full rounded-br-full bg-primary-dark text-[10px] font-black leading-none text-white">✓</span>
+                        <span className="hidden text-[10px] font-black text-primary-dark sm:inline">Selected</span>
+                      </>
+                    ) : null}
+                  </span>
                   {month.current ? <span className="text-[10px] font-bold text-muted">partial</span> : null}
                 </button>
               ))}

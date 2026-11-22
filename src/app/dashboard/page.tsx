@@ -125,6 +125,42 @@ function CategoryDonutChart({
   );
 }
 
+function SetupPlant({ steps }: { steps: number }) {
+  return (
+    <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-accent" aria-hidden="true">
+      <span key={Number(steps > 0)} className="garden-pop">{steps > 0 ? "🌱" : "🫘"}</span>
+      {steps >= 2 ? (
+        <span className="garden-pop absolute bottom-2 left-1.5 size-1.5 rounded-t-full rounded-br-full bg-secondary" />
+      ) : null}
+      {steps >= 3 ? (
+        <span className="garden-pop absolute bottom-2 right-1.5 size-1.5 rounded-t-full rounded-bl-full bg-secondary" />
+      ) : null}
+    </span>
+  );
+}
+
+function SetupBloom({ householdId, userId }: { householdId: string; userId: string }) {
+  const storageKey = `our-little-ledger-setup-bloom-${householdId}-${userId}`;
+  const [visible] = useState(() => window.localStorage.getItem(storageKey) !== "true");
+
+  useEffect(() => {
+    if (visible) {
+      window.localStorage.setItem(storageKey, "true");
+    }
+  }, [storageKey, visible]);
+
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <Card className="flex items-center gap-3 bg-[linear-gradient(145deg,var(--card),var(--background))]">
+      <span className="garden-pop grid size-9 shrink-0 place-items-center rounded-full bg-accent" aria-hidden="true">🌸</span>
+      <p role="status" className="text-sm font-black text-foreground">Your garden setup is complete!</p>
+    </Card>
+  );
+}
+
 function DashboardContent({ householdId, user }: { householdId: string; user: User }) {
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -454,9 +490,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
             {setupMostlyComplete ? (
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent">
-                    🌱
-                  </span>
+                  <SetupPlant steps={setupCompletedCount} />
                   <div className="min-w-0">
                     <h2 className="text-lg font-black text-foreground">Garden setup</h2>
                     <p className="text-sm text-muted">
@@ -484,9 +518,7 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               </div>
             ) : (
               <div className="mb-4 flex items-center gap-2">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent">
-                  🌱
-                </span>
+                <SetupPlant steps={setupCompletedCount} />
                 <div>
                   <h2 className="text-lg font-black text-foreground">Plant your first garden</h2>
                   <p className="text-sm text-muted">A tiny checklist to get the ledger cozy.</p>
@@ -494,21 +526,19 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               </div>
             )}
 
-            {setupMostlyComplete ? (
+            <div
+              className="my-3 h-2 overflow-hidden rounded-full bg-background"
+              role="progressbar"
+              aria-label="Garden setup progress"
+              aria-valuemin={0}
+              aria-valuemax={setupItems.length}
+              aria-valuenow={setupCompletedCount}
+            >
               <div
-                className="mt-3 h-2 overflow-hidden rounded-full bg-background"
-                role="progressbar"
-                aria-label="Garden setup progress"
-                aria-valuemin={0}
-                aria-valuemax={setupItems.length}
-                aria-valuenow={setupCompletedCount}
-              >
-                <div
-                  className="h-full rounded-full bg-secondary transition-[width]"
-                  style={{ width: `${(setupCompletedCount / setupItems.length) * 100}%` }}
-                />
-              </div>
-            ) : null}
+                className="h-full origin-left rounded-full bg-secondary transition-transform"
+                style={{ transform: `scaleX(${setupCompletedCount / setupItems.length})` }}
+              />
+            </div>
 
             {(!setupMostlyComplete || setupExpanded) ? (
               <>
@@ -552,6 +582,8 @@ function DashboardContent({ householdId, user }: { householdId: string; user: Us
               </button>
             ) : null}
           </Card>
+        ) : !loading && setupComplete && !setupDismissed ? (
+          <SetupBloom key={`${householdId}:${user.id}`} householdId={householdId} userId={user.id} />
         ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">

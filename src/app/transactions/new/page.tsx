@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EmptyState, PageHeader, ProtectedPage } from "@/components/app-shell";
+import { useToast } from "@/components/toast";
 import { TransactionForm } from "@/components/transaction-form";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import type { Category, Channel, Profile, Subcategory } from "@/types/database";
@@ -15,6 +16,7 @@ function NewTransactionContent({
   userId: string;
 }) {
   const router = useRouter();
+  const { addToast } = useToast();
   const supabase = useMemo(() => getSupabaseClient(), []);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -125,6 +127,7 @@ function NewTransactionContent({
               return error.message;
             }
 
+            addToast({ title: "Transaction saved", tone: "success" });
             router.push("/transactions");
             return null;
           }}

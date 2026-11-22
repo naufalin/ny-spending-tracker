@@ -634,7 +634,11 @@ function TransactionsContent({ householdId, userId }: { householdId: string; use
       {loading ? (
         <ListSkeleton />
       ) : hasAnyTransactions === false ? (
-        <EmptyState title="No spending yet" body="A fresh lily garden. Add your first transaction." />
+        <EmptyState
+          title="No spending yet"
+          body="Your garden is ready for its first entry."
+          action={<Link href="/transactions/new" className={buttonClassName}>Add your first transaction</Link>}
+        />
       ) : (
         <div className="space-y-3">
           <Card>

@@ -115,7 +115,59 @@ textarea {
   animation: petal-rise 0.35s ease-out both;
 }
 
+@keyframes garden-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.78);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.garden-pop {
+  animation: garden-pop 240ms ease-out both;
+}
+
+.quick-actions {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(6px) scale(0.98);
+  transform-origin: bottom center;
+  transition: opacity 140ms ease-out, transform 140ms ease-out, visibility 0s linear 140ms;
+}
+
+.quick-actions[data-open="true"] {
+  visibility: visible;
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .quick-actions[data-open="true"] > a {
+    animation: petal-rise 180ms ease-out both;
+  }
+
+  .quick-actions[data-open="true"] > a:nth-of-type(2) {
+    animation-delay: 35ms;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .garden-pop {
+    animation: none;
+  }
+
+  .quick-actions {
+    transition: none;
+  }
+
+
   *,
   *::before,
   *::after {

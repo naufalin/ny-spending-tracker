@@ -39,9 +39,8 @@ export function useToast() {
   return context;
 }
 
-const toneDotClass: Record<ToastTone, string> = {
+const toneDotClass: Record<Exclude<ToastTone, "success">, string> = {
   default: "bg-accent",
-  success: "bg-[#9ed193]",
   danger: "bg-[#eda69e]",
 };
 
@@ -66,7 +65,11 @@ function ToastCard({
 
   return (
     <div className="pointer-events-auto flex w-full items-start gap-3 rounded-2xl bg-foreground px-4 py-3 text-background shadow-[0_16px_40px_rgba(63,52,50,0.32)]">
-      <span className={classNames("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDotClass[tone])} aria-hidden="true" />
+      {tone === "success" ? (
+        <span className="garden-pop shrink-0 text-base leading-6" aria-hidden="true">🌱</span>
+      ) : (
+        <span className={classNames("mt-1.5 h-2 w-2 shrink-0 rounded-full", toneDotClass[tone])} aria-hidden="true" />
+      )}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-black leading-6">{title}</p>
         {body ? <p className="text-xs leading-5 opacity-75">{body}</p> : null}

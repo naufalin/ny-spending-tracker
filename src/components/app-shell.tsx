@@ -22,7 +22,7 @@ type ProtectedPageProps = {
   context: HouseholdContext;
 };
 
-type NavIconName = "garden" | "spend" | "trends" | "move" | "jars" | "wallets" | "budgets" | "more";
+type NavIconName = "garden" | "spend" | "trends" | "move" | "jars" | "wallets" | "budgets" | "laundry" | "more";
 
 type NavItem = {
   href: string;
@@ -91,6 +91,7 @@ const navItems: NavItem[] = [
   { href: "/budgets", label: "Budgets", icon: "budgets" },
   { href: "/categories", label: "Jars", icon: "jars" },
   { href: "/channels", label: "Wallets", icon: "wallets" },
+  { href: "/laundry", label: "Laundry", icon: "laundry" },
 ];
 
 const actionItems: ActionItem[] = [
@@ -109,6 +110,12 @@ const actionItems: ActionItem[] = [
 ];
 
 const moreItems: ActionItem[] = [
+  {
+    href: "/laundry",
+    label: "Laundry",
+    description: "Log batches, check returns, and find items",
+    icon: "laundry",
+  },
   {
     href: "/transfers",
     label: "Move",
@@ -194,6 +201,13 @@ function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconName; className
         <>
           <circle cx="12" cy="12" r="8" />
           <circle cx="12" cy="12" r="3.5" />
+        </>
+      ) : null}
+      {name === "laundry" ? (
+        <>
+          <rect x="5" y="3" width="14" height="18" rx="2" />
+          <circle cx="12" cy="13" r="4" />
+          <path d="M5 7h14m-4-2h1" />
         </>
       ) : null}
       {name === "more" ? <path d="M5 12h.01M12 12h.01M19 12h.01" strokeWidth="2.8" /> : null}

@@ -50,7 +50,9 @@ Open http://localhost:3000.
 
 Run `supabase/schema.sql` in the Supabase SQL editor. It creates the initial tables, enables Row Level Security, and adds policies so users only access households where they are listed in `household_members`.
 
-For this first version, household setup is manual:
+Then apply [the Laundry migration](supabase/migrations/004_laundry.sql) to enable shared laundry batches and item history. For an existing database, apply the migration once.
+
+Household setup is manual:
 
 1. Create or invite both users through Supabase Auth.
 2. Create one row in `households`.
